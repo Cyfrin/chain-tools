@@ -11,13 +11,13 @@ export default function WeiConverter() {
 
   const convertFromWei = (weiValue: string) => {
     if (!weiValue || weiValue === '') return { gwei: '', eth: '' };
-    
+
     const weiNum = parseFloat(weiValue);
     if (isNaN(weiNum)) return { gwei: '', eth: '' };
-    
+
     const gweiValue = weiNum / 1e9;
     const ethValue = weiNum / 1e18;
-    
+
     return {
       gwei: gweiValue.toString(),
       eth: ethValue.toString()
@@ -26,13 +26,13 @@ export default function WeiConverter() {
 
   const convertFromGwei = (gweiValue: string) => {
     if (!gweiValue || gweiValue === '') return { wei: '', eth: '' };
-    
+
     const gweiNum = parseFloat(gweiValue);
     if (isNaN(gweiNum)) return { wei: '', eth: '' };
-    
+
     const weiValue = gweiNum * 1e9;
     const ethValue = gweiNum / 1e9;
-    
+
     return {
       wei: weiValue.toString(),
       eth: ethValue.toString()
@@ -41,13 +41,13 @@ export default function WeiConverter() {
 
   const convertFromEth = (ethValue: string) => {
     if (!ethValue || ethValue === '') return { wei: '', gwei: '' };
-    
+
     const ethNum = parseFloat(ethValue);
     if (isNaN(ethNum)) return { wei: '', gwei: '' };
-    
+
     const weiValue = ethNum * 1e18;
     const gweiValue = ethNum * 1e9;
-    
+
     return {
       wei: weiValue.toString(),
       gwei: gweiValue.toString()
@@ -96,7 +96,7 @@ export default function WeiConverter() {
     <div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
       <div className="max-w-2xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
-          <Link 
+          <Link
             href="/"
             className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
           >
@@ -168,14 +168,6 @@ export default function WeiConverter() {
                   <li>1 ETH = 1,000,000,000 Gwei</li>
                   <li>1 ETH = 10<sup>18</sup> Wei</li>
                   <li>1 Gwei = 10<sup>9</sup> Wei</li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-medium mb-2">Typical Gas Prices:</h4>
-                <ul className="space-y-1 text-gray-600 dark:text-gray-400">
-                  <li>Slow: ~10-20 Gwei</li>
-                  <li>Standard: ~20-50 Gwei</li>
-                  <li>Fast: ~50-100+ Gwei</li>
                 </ul>
               </div>
             </div>

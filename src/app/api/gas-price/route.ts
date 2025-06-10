@@ -37,7 +37,6 @@ export async function GET(request: Request) {
     });
 
     const gasPrice = await client.getGasPrice();
-    console.log(gasPrice)
     const gasPriceGwei = Number(gasPrice) / 1e9;
 
     // For very small gas prices (like zkSync), use more precision

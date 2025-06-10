@@ -31,20 +31,72 @@ export default function GasEstimator() {
     : '0';
 
   const totalCostETH = gasPrice && gasAmount
-    ? ((parseFloat(gasPrice) * parseFloat(gasAmount)) / 1e18).toFixed(6)
+    ? ((parseFloat(gasPrice) * parseFloat(gasAmount)) / 1e9).toFixed(9)
     : '0';
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('/api/eth-price');
-        const data = await response.json();
-        setEthPrice(data.price.toString());
+        const oneMinute = 60 * 1000; // 1 minute cache
 
-        const gasResponse = await fetch(`/api/gas-price?chain=${selectedChain}`);
-        const gasData = await gasResponse.json();
-        setGasPrice(gasData.gasPrice.toString());
-
+        // Check cache for ETH price
+        const ethCacheKey = 'eth-price-cache';
+        const ethCached = localStorage.getItem(ethCacheKey);
+        
+        if (ethCached) {
+          const { price, timestamp } = JSON.parse(ethCached);
+          if (Date.now() - timestamp < oneMinute) {
+            setEthPrice(price.toString());
+          } else {
+            // Cache expired, fetch new price
+            const response = await fetch('/api/eth-price');
+            const data = await response.json();
+            setEthPrice(data.price.toString());
+            localStorage.setItem(ethCacheKey, JSON.stringify({
+              price: data.price,
+              timestamp: Date.now()
+            }));
+          }
+        } else {
+          // No cache, fetch new price
+          const response = await fetch('/api/eth-price');
+          const data = await response.json();
+          setEthPrice(data.price.toString());
+          localStorage.setItem(ethCacheKey, JSON.stringify({
+            price: data.price,
+            timestamp: Date.now()
+          }));
+        }
+        
+        // Check cache for gas price (per chain)
+        const gasCacheKey = `gas-price-cache-${selectedChain}`;
+        const gasCached = localStorage.getItem(gasCacheKey);
+        
+        if (gasCached) {
+          const { gasPrice, timestamp } = JSON.parse(gasCached);
+          if (Date.now() - timestamp < oneMinute) {
+            setGasPrice(gasPrice.toString());
+          } else {
+            // Cache expired, fetch new gas price
+            const gasResponse = await fetch(`/api/gas-price?chain=${selectedChain}`);
+            const gasData = await gasResponse.json();
+            setGasPrice(gasData.gasPrice.toString());
+            localStorage.setItem(gasCacheKey, JSON.stringify({
+              gasPrice: gasData.gasPrice,
+              timestamp: Date.now()
+            }));
+          }
+        } else {
+          // No cache, fetch new gas price
+          const gasResponse = await fetch(`/api/gas-price?chain=${selectedChain}`);
+          const gasData = await gasResponse.json();
+          setGasPrice(gasData.gasPrice.toString());
+          localStorage.setItem(gasCacheKey, JSON.stringify({
+            gasPrice: gasData.gasPrice,
+            timestamp: Date.now()
+          }));
+        }
+        
         setLoading(false);
       } catch (error) {
         console.error('Error fetching data:', error);
