@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ethers } from 'ethers';
 
 interface SafeHashResult {
@@ -111,6 +111,9 @@ export default function SafeHash() {
   const [apiError, setApiError] = useState('');
   const [apiLoading, setApiLoading] = useState(false);
   const [apiFieldsError, setApiFieldsError] = useState<{ to?: boolean; data?: boolean }>({});
+
+  // Ref for scrolling to results
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const calculateSafeHash = async (): Promise<SafeHashResult> => {
     try {
@@ -362,6 +365,11 @@ export default function SafeHash() {
         const nestedHashResult = await calculateNestedSafeHash(hashResult.safeTransactionHash);
         setNestedResult(nestedHashResult);
       }
+
+      // Scroll to results after successful calculation
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -709,7 +717,7 @@ export default function SafeHash() {
               </div>
             </div>
 
-            <div>
+            <div ref={resultsRef}>
               <h3 className="text-lg font-semibold mb-4">Results</h3>
               
               {error && (
