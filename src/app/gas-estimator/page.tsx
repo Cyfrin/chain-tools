@@ -3,19 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-
-const GAS_PRESETS = {
-  'transfer': 21000,
-  'swap': 150000,
-  'erc20_deploy': 1200000
-};
-
-const CHAIN_CONFIG = {
-  'ethereum': { name: 'Ethereum', logo: '/chains/ethereum.svg' },
-  'arbitrum': { name: 'Arbitrum One', logo: '/chains/arbitrum.svg' },
-  'optimism': { name: 'Optimism', logo: '/chains/optimism.svg' },
-  'zksync': { name: 'zkSync Era', logo: '/chains/zksync.svg' }
-};
+import { CHAIN_CONFIG, GAS_PRESETS } from '@/config/chains';
 
 export default function GasEstimator() {
   const [ethPrice, setEthPrice] = useState<string>('');
@@ -237,9 +225,9 @@ export default function GasEstimator() {
                 className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
               >
                 <option value="custom">Custom</option>
-                <option value="transfer">Transfer ETH (~21,000)</option>
-                <option value="swap">Swap on Uniswap (~150,000)</option>
-                <option value="erc20_deploy">Deploy ERC20 (~1,200,000)</option>
+                <option value="transfer">Transfer ETH (~{GAS_PRESETS.transfer.toLocaleString()})</option>
+                <option value="swap">Swap on Uniswap (~{GAS_PRESETS.swap.toLocaleString()})</option>
+                <option value="erc20_deploy">Deploy ERC20 (~{GAS_PRESETS.erc20_deploy.toLocaleString()})</option>
               </select>
               <input
                 type="number"

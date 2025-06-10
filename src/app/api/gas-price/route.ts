@@ -1,31 +1,23 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http } from 'viem';
-import { mainnet, arbitrum, optimism, zkSync } from 'viem/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 
-const CHAIN_CONFIG = {
-  ethereum: {
-    chain: mainnet,
-    rpcUrl: process.env.ETHEREUM_RPC_URL || 'https://eth.llamarpc.com'
-  },
-  arbitrum: {
-    chain: arbitrum,
-    rpcUrl: process.env.ARBITRUM_RPC_URL || 'https://arb1.arbitrum.io/rpc'
-  },
-  optimism: {
-    chain: optimism,
-    rpcUrl: process.env.OPTIMISM_RPC_URL || 'https://mainnet.optimism.io'
-  },
-  zksync: {
-    chain: zkSync,
-    rpcUrl: process.env.ZKSYNC_RPC_URL || 'https://mainnet.era.zksync.io'
-  }
-};
+// Server-side cache (30 seconds)
+const cache = new Map<string, { gasPrice: number; timestamp: number }>();
+const CACHE_DURATION = 30 * 1000; // 30 seconds
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const chain = searchParams.get('chain') || 'ethereum';
 
   try {
+    // Check cache first
+    const now = Date.now();
+    const cached = cache.get(chain);
+    if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+      return NextResponse.json({ gasPrice: cached.gasPrice });
+    }
+
     const config = CHAIN_CONFIG[chain as keyof typeof CHAIN_CONFIG];
     if (!config) {
       return NextResponse.json({ gasPrice: 20 }, { status: 400 });
@@ -43,6 +35,9 @@ export async function GET(request: Request) {
     const formattedGasPrice = gasPriceGwei < 1
       ? Math.round(gasPriceGwei * 1000) / 1000  // 3 decimal places for < 1 Gwei
       : Math.round(gasPriceGwei);               // Round to whole number for >= 1 Gwei
+
+    // Update cache
+    cache.set(chain, { gasPrice: formattedGasPrice, timestamp: now });
 
     return NextResponse.json({ gasPrice: formattedGasPrice });
   } catch (error) {

@@ -17,6 +17,12 @@ export default function Home() {
             Gas Estimator
           </Link>
           <Link
+            href="/fee-leaderboard"
+            className="rounded-lg border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-base h-12 px-8 min-w-[200px]"
+          >
+            Fee Leaderboard
+          </Link>
+          <Link
             href="/wei-converter"
             className="rounded-lg border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-base h-12 px-8 min-w-[200px]"
           >
