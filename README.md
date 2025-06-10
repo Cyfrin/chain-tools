@@ -1,36 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gas Tools
+
+## About
+
+Gas Tools is a Next.js application that provides essential Ethereum utilities for developers and users. It features a gas estimator for calculating transaction costs across multiple chains and a wei converter for seamless unit conversions between Wei, Gwei, and ETH.
+
+**Features:**
+- **Gas Estimator**: Calculate transaction costs with real-time ETH prices and gas prices across Ethereum, Arbitrum, Optimism, and zkSync Era
+- **Wei Converter**: Convert between Wei, Gwei, and ETH with real-time calculations and helpful reference guides
 
 ## Getting Started
 
-First, run the development server:
+### Requirements
 
+- Node.js 18+ 
+- npm, yarn, pnpm, or bun
+
+### Quickstart
+
+1. Clone the repository and install dependencies:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Create a `.env.local` file in the root directory (optional - defaults provided):
+```bash
+# RPC URLs for different chains
+ETHEREUM_RPC_URL=https://eth.llamarpc.com
+ARBITRUM_RPC_URL=https://arb1.arbitrum.io/rpc
+OPTIMISM_RPC_URL=https://mainnet.optimism.io
+ZKSYNC_RPC_URL=https://mainnet.era.zksync.io
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Start the development server:
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-## Learn More
+## Usage
 
-To learn more about Next.js, take a look at the following resources:
+### Gas Estimator (`/gas-estimator`)
+- **ETH Price**: Automatically fetched from CoinGecko API with 5-minute caching
+- **Chain Selection**: Choose between Ethereum, Arbitrum, Optimism, or zkSync Era
+- **Gas Price**: Automatically fetched from the selected chain's RPC
+- **Gas Amount**: Enter custom amount or select from presets:
+  - Transfer ETH (~21,000)
+  - Swap on Uniswap (~150,000)
+  - Deploy ERC20 (~1,200,000)
+- View estimated costs in both ETH and USD
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Wei Converter (`/wei-converter`)
+- Enter values in any unit (Wei, Gwei, or ETH)
+- Real-time conversion between all units
+- Quick reference guide with common values and gas price ranges
+- Clear all functionality for easy reset
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Thank You
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Thank you for using Gas Tools! This project aims to make Ethereum development and usage more accessible by providing essential calculation tools. Feel free to contribute or report issues to help improve the application.
