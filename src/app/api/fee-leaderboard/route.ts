@@ -17,6 +17,17 @@ async function getGasPriceForChain(chainKey: string): Promise<number> {
   }
 }
 
+async function getEthPrice(): Promise<number> {
+  try {
+    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/eth-price`);
+    const data = await response.json();
+    return data.price;
+  } catch (error) {
+    console.error('Error fetching ETH price:', error);
+    return 3000; // fallback
+  }
+}
+
 export async function GET() {
   try {
     // Check cache
@@ -25,31 +36,40 @@ export async function GET() {
       return NextResponse.json(cachedData);
     }
 
-    // Fetch gas prices for all chains
-    const chainData = await Promise.all(
-      Object.entries(CHAIN_CONFIG).map(async ([chainKey, config]) => {
-        const gasPrice = await getGasPriceForChain(chainKey);
-        
-        // Calculate costs in Gwei
-        const transferCostGwei = gasPrice * GAS_PRESETS.transfer;
-        const swapCostGwei = gasPrice * GAS_PRESETS.swap;
-        
-        // Convert to ETH (Gwei to ETH = divide by 1e9)
-        const transferCostETH = transferCostGwei / 1e9;
-        const swapCostETH = swapCostGwei / 1e9;
+    // Fetch ETH price and gas prices for all chains
+    const [ethPrice, ...gasPrices] = await Promise.all([
+      getEthPrice(),
+      ...Object.keys(CHAIN_CONFIG).map(chainKey => getGasPriceForChain(chainKey))
+    ]);
 
-        return {
-          chainKey,
-          name: config.name,
-          logo: config.logo,
-          gasPrice,
-          transferCostETH,
-          swapCostETH,
-          transferCostGwei,
-          swapCostGwei
-        };
-      })
-    );
+    const chainData = Object.entries(CHAIN_CONFIG).map(([chainKey, config], index) => {
+      const gasPrice = gasPrices[index];
+      
+      // Calculate costs in Gwei
+      const transferCostGwei = gasPrice * GAS_PRESETS.transfer;
+      const swapCostGwei = gasPrice * GAS_PRESETS.swap;
+      
+      // Convert to ETH (Gwei to ETH = divide by 1e9)
+      const transferCostETH = transferCostGwei / 1e9;
+      const swapCostETH = swapCostGwei / 1e9;
+      
+      // Calculate USD costs
+      const transferCostUSD = transferCostETH * ethPrice;
+      const swapCostUSD = swapCostETH * ethPrice;
+
+      return {
+        chainKey,
+        name: config.name,
+        logo: config.logo,
+        gasPrice,
+        transferCostETH,
+        swapCostETH,
+        transferCostGwei,
+        swapCostGwei,
+        transferCostUSD,
+        swapCostUSD
+      };
+    });
 
     // Sort by transfer cost (cheapest first)
     const sortedData = chainData.sort((a, b) => a.transferCostETH - b.transferCostETH);

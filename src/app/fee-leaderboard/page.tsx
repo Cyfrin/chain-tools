@@ -13,6 +13,8 @@ interface ChainData {
   swapCostETH: number;
   transferCostGwei: number;
   swapCostGwei: number;
+  transferCostUSD: number;
+  swapCostUSD: number;
 }
 
 export default function FeeLeaderboard() {
@@ -147,7 +149,7 @@ export default function FeeLeaderboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm font-mono text-gray-900 dark:text-gray-100">
-                        {chain.transferCostETH.toFixed(9)} ETH
+                        ${chain.transferCostUSD.toFixed(6)}
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
                         {chain.transferCostGwei.toLocaleString()} Gwei
@@ -155,7 +157,7 @@ export default function FeeLeaderboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm font-mono text-gray-900 dark:text-gray-100">
-                        {chain.swapCostETH.toFixed(9)} ETH
+                        ${chain.swapCostUSD.toFixed(6)}
                       </div>
                       <div className="text-sm text-gray-500 dark:text-gray-400">
                         {chain.swapCostGwei.toLocaleString()} Gwei

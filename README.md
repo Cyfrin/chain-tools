@@ -2,11 +2,12 @@
 
 ## About
 
-Gas Tools is a Next.js application that provides essential Ethereum utilities for developers and users. It features a gas estimator for calculating transaction costs across multiple chains and a wei converter for seamless unit conversions between Wei, Gwei, and ETH.
+Gas Tools is a Next.js application that provides essential Ethereum utilities for developers and users. It features a gas estimator for calculating transaction costs across multiple chains, a wei converter for seamless unit conversions, and a fee leaderboard for comparing costs across different blockchains.
 
 **Features:**
 - **Gas Estimator**: Calculate transaction costs with real-time ETH prices and gas prices across Ethereum, Arbitrum, Optimism, and zkSync Era
 - **Wei Converter**: Convert between Wei, Gwei, and ETH with real-time calculations and helpful reference guides
+- **Fee Leaderboard**: Compare gas costs across different chains, ranked from cheapest to most expensive
 
 ## Getting Started
 
@@ -55,6 +56,15 @@ npm run dev
 - Real-time conversion between all units
 - Quick reference guide with common values and gas price ranges
 - Clear all functionality for easy reset
+
+### Fee Leaderboard (`/fee-leaderboard`)
+- Compare transaction costs across multiple blockchain networks
+- Real-time gas prices fetched from each chain's RPC
+- Ranked display from cheapest to most expensive
+- Shows costs for common operations:
+  - ETH transfers (~21,000 gas)
+  - Token swaps (~150,000 gas)
+- Data cached for 1 minute for optimal performance
 
 ## Thank You
 
