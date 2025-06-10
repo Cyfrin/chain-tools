@@ -2,12 +2,35 @@
 
 import { useState } from 'react';
 import { ethers } from 'ethers';
-import Link from 'next/link';
 
 interface SafeHashResult {
   domainHash: string;
   messageHash: string;
   safeTransactionHash: string;
+}
+
+interface NestedSafeHashResult extends SafeHashResult {
+  nestedDomainHash: string;
+  nestedMessageHash: string;
+  nestedSafeTransactionHash: string;
+}
+
+interface SafeApiResponse {
+  count: number;
+  results: SafeApiTransaction[];
+}
+
+interface SafeApiTransaction {
+  to: string;
+  data: string;
+  value: string;
+  operation: number;
+  gasToken: string;
+  safeTxGas: number;
+  baseGas: number;
+  gasPrice: string;
+  refundReceiver: string;
+  nonce: number;
 }
 
 interface SafeTransaction {
@@ -39,6 +62,22 @@ const CHAIN_IDS: { [key: string]: number } = {
   soneium: 1946,
 };
 
+// Safe API endpoints based on safe_hashes.sh
+const SAFE_API_URLS: { [key: string]: string } = {
+  arbitrum: "https://safe-transaction-arbitrum.safe.global",
+  avalanche: "https://safe-transaction-avalanche.safe.global",
+  base: "https://safe-transaction-base.safe.global",
+  ethereum: "https://safe-transaction-mainnet.safe.global",
+  linea: "https://safe-transaction-linea.safe.global",
+  optimism: "https://safe-transaction-optimism.safe.global",
+  polygon: "https://safe-transaction-polygon.safe.global",
+  polygonzkevm: "https://safe-transaction-zkevm.safe.global",
+  scroll: "https://safe-transaction-scroll.safe.global",
+  sepolia: "https://safe-transaction-sepolia.safe.global",
+  worldchain: "https://safe-transaction-worldchain.safe.global",
+  zksync: "https://safe-transaction-zksync.safe.global",
+};
+
 const SAFE_VERSIONS = ['1.4.1', '1.3.0', '1.2.0', '1.1.1', '1.0.0'];
 
 export default function SafeHash() {
@@ -61,6 +100,17 @@ export default function SafeHash() {
   const [result, setResult] = useState<SafeHashResult | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Nested safe state
+  const [isNestedSafe, setIsNestedSafe] = useState(false);
+  const [nestedSafeAddress, setNestedSafeAddress] = useState('');
+  const [nestedSafeNonce, setNestedSafeNonce] = useState('0');
+  const [nestedResult, setNestedResult] = useState<NestedSafeHashResult | null>(null);
+
+  // API fetch state
+  const [apiError, setApiError] = useState('');
+  const [apiLoading, setApiLoading] = useState(false);
+  const [apiFieldsError, setApiFieldsError] = useState<{ to?: boolean; data?: boolean }>({});
 
   const calculateSafeHash = async (): Promise<SafeHashResult> => {
     try {
@@ -130,6 +180,156 @@ export default function SafeHash() {
     }
   };
 
+  const calculateNestedSafeHash = async (mainTxHash: string): Promise<NestedSafeHashResult> => {
+    try {
+      const selectedChainId = CHAIN_IDS[chainId];
+      const [majorVersion, minorVersion] = safeVersion.split('.').map(Number);
+      const isVersionGte130 = majorVersion > 1 || (majorVersion === 1 && minorVersion >= 3);
+
+      // First, calculate the main transaction hash (already done)
+      const mainResult = await calculateSafeHash();
+
+      // Create nested transaction data
+      // The nested transaction calls approveHash(bytes32) with the main tx hash
+      // Function selector for approveHash(bytes32) is 0xd4d9bdcd
+      const approveHashData = '0xd4d9bdcd' + mainTxHash.slice(2); // Remove 0x prefix from hash
+
+      const nestedTransaction = {
+        to: safeAddress, // Nested transaction targets the main safe
+        value: '0',
+        data: approveHashData,
+        operation: 0, // CALL operation
+        safeTxGas: '0',
+        baseGas: '0',
+        gasPrice: '0',
+        gasToken: '0x0000000000000000000000000000000000000000',
+        refundReceiver: '0x0000000000000000000000000000000000000000',
+        nonce: nestedSafeNonce
+      };
+
+      // Calculate nested domain hash
+      let nestedDomainData;
+      if (isVersionGte130) {
+        nestedDomainData = {
+          chainId: selectedChainId,
+          verifyingContract: nestedSafeAddress
+        };
+      } else {
+        nestedDomainData = {
+          verifyingContract: nestedSafeAddress
+        };
+      }
+
+      const nestedDomainHash = ethers.TypedDataEncoder.hashDomain(nestedDomainData);
+
+      // Calculate nested message hash
+      const baseGasFieldName = isVersionGte130 ? 'baseGas' : 'dataGas';
+      const types = {
+        SafeTx: [
+          { name: 'to', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'data', type: 'bytes' },
+          { name: 'operation', type: 'uint8' },
+          { name: 'safeTxGas', type: 'uint256' },
+          { name: baseGasFieldName, type: 'uint256' },
+          { name: 'gasPrice', type: 'uint256' },
+          { name: 'gasToken', type: 'address' },
+          { name: 'refundReceiver', type: 'address' },
+          { name: 'nonce', type: 'uint256' }
+        ]
+      };
+
+      const nestedMessage = {
+        to: nestedTransaction.to,
+        value: nestedTransaction.value,
+        data: nestedTransaction.data,
+        operation: nestedTransaction.operation,
+        safeTxGas: nestedTransaction.safeTxGas,
+        [baseGasFieldName]: nestedTransaction.baseGas,
+        gasPrice: nestedTransaction.gasPrice,
+        gasToken: nestedTransaction.gasToken,
+        refundReceiver: nestedTransaction.refundReceiver,
+        nonce: nestedTransaction.nonce
+      };
+
+      const nestedMessageHash = ethers.TypedDataEncoder.hashStruct('SafeTx', types, nestedMessage);
+      const nestedSafeTransactionHash = ethers.TypedDataEncoder.hash(nestedDomainData, types, nestedMessage);
+
+      return {
+        ...mainResult,
+        nestedDomainHash,
+        nestedMessageHash,
+        nestedSafeTransactionHash
+      };
+    } catch (err) {
+      throw new Error(`Failed to calculate nested Safe hash: ${err}`);
+    }
+  };
+
+  const fetchSafeTransactionData = async () => {
+    if (!safeAddress || !ethers.isAddress(safeAddress)) {
+      setApiError('Please enter a valid Safe address');
+      return;
+    }
+
+    if (!transaction.nonce) {
+      setApiError('Please enter a nonce');
+      return;
+    }
+
+    const apiUrl = SAFE_API_URLS[chainId];
+    if (!apiUrl) {
+      setApiError(`Safe API not available for ${chainId} network`);
+      return;
+    }
+
+    setApiLoading(true);
+    setApiError('');
+    setApiFieldsError({});
+
+    try {
+      const endpoint = `${apiUrl}/api/v1/safes/${safeAddress}/multisig-transactions/?nonce=${transaction.nonce}`;
+      const response = await fetch(endpoint);
+      
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const data: SafeApiResponse = await response.json();
+
+      if (data.count === 0) {
+        setApiError(`No transaction found for nonce ${transaction.nonce}`);
+        setApiFieldsError({ to: true, data: true });
+        return;
+      }
+
+      // Use the first result (index 0)
+      const apiTransaction = data.results[0];
+
+      // Update the form with API data
+      setTransaction(prev => ({
+        ...prev,
+        to: apiTransaction.to,
+        data: apiTransaction.data,
+        value: apiTransaction.value,
+        operation: apiTransaction.operation,
+        safeTxGas: apiTransaction.safeTxGas.toString(),
+        baseGas: apiTransaction.baseGas.toString(),
+        gasPrice: apiTransaction.gasPrice,
+        gasToken: apiTransaction.gasToken,
+        refundReceiver: apiTransaction.refundReceiver,
+      }));
+
+      setApiError('');
+      setApiFieldsError({});
+    } catch (err) {
+      setApiError(`Failed to fetch transaction data: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setApiFieldsError({ to: true, data: true });
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
   const handleCalculate = async () => {
     if (!safeAddress || !ethers.isAddress(safeAddress)) {
       setError('Please enter a valid Safe address');
@@ -141,13 +341,27 @@ export default function SafeHash() {
       return;
     }
 
+    if (isNestedSafe) {
+      if (!nestedSafeAddress || !ethers.isAddress(nestedSafeAddress)) {
+        setError('Please enter a valid nested Safe address');
+        return;
+      }
+    }
+
     setLoading(true);
     setError('');
     setResult(null);
+    setNestedResult(null);
 
     try {
       const hashResult = await calculateSafeHash();
       setResult(hashResult);
+
+      // If nested safe is enabled, calculate nested hash
+      if (isNestedSafe) {
+        const nestedHashResult = await calculateNestedSafeHash(hashResult.safeTransactionHash);
+        setNestedResult(nestedHashResult);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -160,6 +374,14 @@ export default function SafeHash() {
       ...prev,
       [field]: value
     }));
+
+    // Clear API field errors when user manually fills the fields
+    if (field === 'to' && value && apiFieldsError.to) {
+      setApiFieldsError(prev => ({ ...prev, to: false }));
+    }
+    if (field === 'data' && value && apiFieldsError.data) {
+      setApiFieldsError(prev => ({ ...prev, data: false }));
+    }
   };
 
   const loadExample = () => {
@@ -183,14 +405,6 @@ export default function SafeHash() {
   return (
     <div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <Link
-            href="/"
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
-          >
-            ← Back to Home
-          </Link>
-        </div>
 
         <h1 className="text-3xl font-bold mb-8">Safe Wallet Hash Calculator</h1>
 
@@ -276,17 +490,66 @@ export default function SafeHash() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    To Address *
-                  </label>
-                  <input
-                    type="text"
-                    value={transaction.to}
-                    onChange={(e) => handleTransactionChange('to', e.target.value)}
-                    placeholder="0x..."
-                    className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
-                  />
+                {/* Safe API Section */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-md font-semibold">Transaction Data from Safe API</h4>
+                    <button
+                      onClick={fetchSafeTransactionData}
+                      disabled={apiLoading || !safeAddress || !transaction.nonce}
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed cursor-pointer"
+                    >
+                      {apiLoading ? 'Fetching...' : 'Fetch from API'}
+                    </button>
+                  </div>
+
+                  {apiError && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
+                      <p className="text-red-800 dark:text-red-200 text-sm">{apiError}</p>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        To Address *
+                      </label>
+                      <input
+                        type="text"
+                        value={transaction.to}
+                        onChange={(e) => handleTransactionChange('to', e.target.value)}
+                        placeholder="0x... (will be filled by API or enter manually)"
+                        className={`w-full p-3 border rounded-lg dark:bg-gray-800 font-mono text-sm ${
+                          apiFieldsError.to 
+                            ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20' 
+                            : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Data
+                      </label>
+                      <textarea
+                        value={transaction.data}
+                        onChange={(e) => handleTransactionChange('data', e.target.value)}
+                        placeholder="0x... (will be filled by API or enter manually)"
+                        rows={3}
+                        className={`w-full p-3 border rounded-lg dark:bg-gray-800 font-mono text-sm ${
+                          apiFieldsError.data 
+                            ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20' 
+                            : 'border-gray-300 dark:border-gray-600'
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                    <p>• If fields are empty, click "Fetch from API" to auto-fill transaction data</p>
+                    <p>• If API fails, fields will be highlighted in red for manual entry</p>
+                    <p>• Requires valid Safe address and nonce</p>
+                  </div>
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
@@ -317,20 +580,10 @@ export default function SafeHash() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Data
-                  </label>
-                  <textarea
-                    value={transaction.data}
-                    onChange={(e) => handleTransactionChange('data', e.target.value)}
-                    placeholder="0x..."
-                    rows={3}
-                    className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
-                  />
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                  <h4 className="text-md font-semibold mb-4">Additional Transaction Parameters</h4>
+                  
+                  <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-2">
                       Safe Tx Gas
@@ -392,12 +645,64 @@ export default function SafeHash() {
                     placeholder="0x0000000000000000000000000000000000000000"
                     className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
                   />
+                  </div>
+                </div>
+
+                {/* Nested Safe Section */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <input
+                      type="checkbox"
+                      id="nested-safe"
+                      checked={isNestedSafe}
+                      onChange={(e) => setIsNestedSafe(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="nested-safe" className="text-sm font-medium cursor-pointer">
+                      Nested Safe?
+                    </label>
+                  </div>
+
+                  {isNestedSafe && (
+                    <div className="space-y-4 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                      <div className="text-sm text-blue-800 dark:text-blue-200 mb-4">
+                        <p><strong>Note:</strong> Nested safe functionality calculates a wrapper transaction that calls <code>approveHash()</code> on the outer safe.</p>
+                      </div>
+                      
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">
+                            Nested Safe Address *
+                          </label>
+                          <input
+                            type="text"
+                            value={nestedSafeAddress}
+                            onChange={(e) => setNestedSafeAddress(e.target.value)}
+                            placeholder="0x..."
+                            className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium mb-2">
+                            Nested Safe Nonce
+                          </label>
+                          <input
+                            type="number"
+                            value={nestedSafeNonce}
+                            onChange={(e) => setNestedSafeNonce(e.target.value)}
+                            className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <button
                   onClick={handleCalculate}
                   disabled={loading || !safeAddress || !transaction.to}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:cursor-not-allowed cursor-pointer"
                 >
                   {loading ? 'Calculating...' : 'Calculate Safe Hash'}
                 </button>
@@ -437,6 +742,47 @@ export default function SafeHash() {
                     <p className="text-xs text-blue-600 dark:text-blue-300 mt-2">
                       This is the hash you should verify when signing
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {nestedResult && (
+                <div className="mt-8 space-y-4">
+                  <h4 className="text-lg font-semibold text-purple-800 dark:text-purple-200 border-t border-purple-200 dark:border-purple-800 pt-4">
+                    Nested Safe Transaction Results
+                  </h4>
+                  
+                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
+                    <h5 className="font-medium mb-2">Nested Domain Hash</h5>
+                    <p className="font-mono text-xs break-all">
+                      {nestedResult.nestedDomainHash}
+                    </p>
+                  </div>
+
+                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
+                    <h5 className="font-medium mb-2">Nested Message Hash</h5>
+                    <p className="font-mono text-xs break-all">
+                      {nestedResult.nestedMessageHash}
+                    </p>
+                  </div>
+
+                  <div className="bg-purple-100 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-700 rounded-lg p-4">
+                    <h5 className="font-medium text-purple-800 dark:text-purple-200 mb-2">Nested Safe Transaction Hash</h5>
+                    <p className="font-mono text-xs text-purple-800 dark:text-purple-200 break-all">
+                      {nestedResult.nestedSafeTransactionHash}
+                    </p>
+                    <p className="text-xs text-purple-600 dark:text-purple-300 mt-2">
+                      This hash is for the outer safe to approve the inner safe's transaction
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                    <h5 className="font-medium mb-2">Nested Transaction Details</h5>
+                    <div className="text-xs space-y-1">
+                      <p><span className="font-medium">To:</span> <span className="font-mono break-all">{safeAddress}</span> (inner safe)</p>
+                      <p><span className="font-medium">Data:</span> <span className="font-mono text-xs break-all">0xd4d9bdcd{result?.safeTransactionHash.slice(2)}</span></p>
+                      <p><span className="font-medium">Function:</span> approveHash(bytes32)</p>
+                    </div>
                   </div>
                 </div>
               )}

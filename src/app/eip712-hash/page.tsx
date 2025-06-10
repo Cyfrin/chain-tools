@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { ethers } from 'ethers';
-import Link from 'next/link';
 
 interface EIP712HashResult {
   domainHash: string;
@@ -57,7 +56,7 @@ export default function EIP712Hash() {
 
     try {
       const eip712Data = JSON.parse(jsonInput);
-      
+
       // Validate required fields
       if (!eip712Data.types || !eip712Data.domain || !eip712Data.message || !eip712Data.primaryType) {
         throw new Error('Invalid EIP-712 format. Missing required fields: types, domain, message, or primaryType');
@@ -88,13 +87,13 @@ export default function EIP712Hash() {
     const exampleEIP712 = {
       "types": {
         "Person": [
-          {"name": "name", "type": "string"},
-          {"name": "wallet", "type": "address"}
+          { "name": "name", "type": "string" },
+          { "name": "wallet", "type": "address" }
         ],
         "Mail": [
-          {"name": "from", "type": "Person"},
-          {"name": "to", "type": "Person"},
-          {"name": "contents", "type": "string"}
+          { "name": "from", "type": "Person" },
+          { "name": "to", "type": "Person" },
+          { "name": "contents", "type": "string" }
         ]
       },
       "domain": {
@@ -122,14 +121,6 @@ export default function EIP712Hash() {
   return (
     <div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <Link
-            href="/"
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
-          >
-            ← Back to Home
-          </Link>
-        </div>
 
         <h1 className="text-3xl font-bold mb-8">EIP-712 Hash Calculator</h1>
 
@@ -158,7 +149,7 @@ export default function EIP712Hash() {
                   </label>
                 </div>
               </div>
-                
+
               <textarea
                 value={jsonInput}
                 onChange={(e) => setJsonInput(e.target.value)}
@@ -177,7 +168,7 @@ export default function EIP712Hash() {
 
             <div>
               <h3 className="text-lg font-semibold mb-4">Results</h3>
-                
+
               {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
                   <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>

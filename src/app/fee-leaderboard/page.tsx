@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import Image from 'next/image';
 
 interface ChainData {
@@ -85,14 +84,6 @@ export default function FeeLeaderboard() {
   return (
     <div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-4 mb-8">
-          <Link
-            href="/"
-            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
-          >
-            ← Back to Home
-          </Link>
-        </div>
 
         <h1 className="text-3xl font-bold mb-8">Fee Leaderboard</h1>
         <p className="text-gray-600 dark:text-gray-400 mb-8">
@@ -174,6 +165,18 @@ export default function FeeLeaderboard() {
           <p>• Transfer costs based on 21,000 gas (standard ETH transfer)</p>
           <p>• Swap costs based on 150,000 gas (typical DEX swap)</p>
           <p>• Data updates every 30 seconds</p>
+        </div>
+
+        <div className="mt-4 text-center text-xs text-gray-500 dark:text-gray-400">
+          Powered by{' '}
+          <a 
+            href="https://www.coingecko.com/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            CoinGecko
+          </a>
         </div>
       </div>
     </div>

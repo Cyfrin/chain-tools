@@ -1,8 +1,8 @@
-# Gas Tools
+# Chain Tools
 
 ## About
 
-Gas Tools is a Next.js application that provides essential Ethereum utilities for developers and users. It features a gas estimator for calculating transaction costs across multiple chains, a wei converter for seamless unit conversions, and a fee leaderboard for comparing costs across different blockchains.
+Chain Tools is a Next.js application that provides essential Ethereum utilities for developers and users. It features a gas estimator for calculating transaction costs across multiple chains, a wei converter for seamless unit conversions, and a fee leaderboard for comparing costs across different blockchains.
 
 **Features:**
 - **Gas Estimator**: Calculate transaction costs with real-time ETH prices and gas prices across Ethereum, Arbitrum, Optimism, and zkSync Era
@@ -68,4 +68,4 @@ npm run dev
 
 ## Thank You
 
-Thank you for using Gas Tools! This project aims to make Ethereum development and usage more accessible by providing essential calculation tools. Feel free to contribute or report issues to help improve the application.
+Thank you for using Chain Tools! This project aims to make Ethereum development and usage more accessible by providing essential calculation tools. Feel free to contribute or report issues to help improve the application.
