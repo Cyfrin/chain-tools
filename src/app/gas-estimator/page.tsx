@@ -87,8 +87,36 @@ export default function GasEstimator() {
         <h1 className="text-3xl font-bold mb-8">Gas Estimator</h1>
 
         <div className="space-y-6">
+
           <div>
-            <label className="block text-sm font-medium mb-2">Chain</label>
+            <label className="block text-sm font-medium mb-2">ETH Price (USD)</label>
+            <input
+              type="number"
+              value={ethPrice}
+              onChange={(e) => setEthPrice(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+              placeholder="Current ETH price in USD"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+              Chain (Optional)
+              <div className="relative group">
+                <svg 
+                  className="w-4 h-4 text-gray-400 cursor-help" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded py-2 px-3 whitespace-nowrap z-20">
+                  Chain selection fetches current gas price. Manual gas price input will override this.
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                </div>
+              </div>
+            </label>
             <div className="relative">
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -108,7 +136,7 @@ export default function GasEstimator() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              
+
               {dropdownOpen && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-10">
                   {Object.entries(CHAIN_CONFIG).map(([key, config]) => (
@@ -135,16 +163,7 @@ export default function GasEstimator() {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">ETH Price (USD)</label>
-            <input
-              type="number"
-              value={ethPrice}
-              onChange={(e) => setEthPrice(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
-              placeholder="Current ETH price in USD"
-            />
-          </div>
+
 
           <div>
             <label className="block text-sm font-medium mb-2">Gas Price (Gwei)</label>
