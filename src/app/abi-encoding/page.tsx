@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { AbiCoder, FunctionFragment, Interface, keccak256, toUtf8Bytes, getAddress } from 'ethers'
 
 // Client-side cache for signature lookups
@@ -34,6 +35,15 @@ interface MultiSendData {
 
 export default function AbiToolsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('decode')
+  const searchParams = useSearchParams()
+
+  // Check URL parameters and set active tab accordingly
+  useEffect(() => {
+    const data = searchParams.get('data')
+    if (data) {
+      setActiveTab('decode')
+    }
+  }, [searchParams])
 
   return (
     <div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
@@ -91,6 +101,17 @@ function DecodeTab() {
   const [autoDetect, setAutoDetect] = useState(true)
   const [decodeMultiSend, setDecodeMultiSend] = useState(true)
   const [loading, setLoading] = useState(false)
+  const [copiedShare, setCopiedShare] = useState(false)
+  const [copiedResult, setCopiedResult] = useState(false)
+  const searchParams = useSearchParams()
+
+  // Load URL parameters on component mount
+  useEffect(() => {
+    const data = searchParams.get('data')
+    if (data) {
+      handleAbiDataChange(data)
+    }
+  }, [searchParams])
 
   const lookupSignature = async (selector: string) => {
     try {
@@ -531,12 +552,38 @@ function DecodeTab() {
             Decoded Result
           </label>
           {decodedResult && (
-            <button
-              onClick={() => navigator.clipboard.writeText(decodedResult)}
-              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors cursor-pointer"
-            >
-              Copy
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const url = new URL(window.location.href)
+                  url.searchParams.set('data', abiData)
+                  navigator.clipboard.writeText(url.toString())
+                  setCopiedShare(true)
+                  setTimeout(() => setCopiedShare(false), 2000)
+                }}
+                className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-32 whitespace-nowrap ${
+                  copiedShare 
+                    ? 'bg-green-700' 
+                    : 'bg-green-600 hover:bg-green-700'
+                }`}
+              >
+                {copiedShare ? 'Copied!' : 'Share Decoded Data'}
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(decodedResult)
+                  setCopiedResult(true)
+                  setTimeout(() => setCopiedResult(false), 2000)
+                }}
+                className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-16 whitespace-nowrap ${
+                  copiedResult 
+                    ? 'bg-blue-700' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {copiedResult ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
           )}
         </div>
         <textarea
