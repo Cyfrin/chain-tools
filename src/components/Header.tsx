@@ -17,6 +17,7 @@ const TOOLS = [
   { name: 'Gas Estimator', href: '/gas-estimator' },
   { name: 'Fee Leaderboard', href: '/fee-leaderboard' },
   { name: 'Wei Converter', href: '/wei-converter' },
+  { name: 'ABI Encoding', href: '/abi-encoding' },
   { name: 'EIP-712 Hash', href: '/eip712-hash' },
   { name: 'Safe Wallet Hash', href: '/safe-hash' },
   { name: 'About', href: '/about' },
