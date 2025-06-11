@@ -536,9 +536,23 @@ export default function SafeHash() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Data
-                      </label>
+                      <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm font-medium">
+                          Data
+                        </label>
+                        {transaction.data && transaction.data !== '0x' && (
+                          <button
+                            onClick={() => {
+                              const url = new URL(window.location.origin + '/abi-encoding')
+                              url.searchParams.set('data', transaction.data)
+                              window.open(url.toString(), '_blank')
+                            }}
+                            className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors cursor-pointer"
+                          >
+                            Decode Data ↗
+                          </button>
+                        )}
+                      </div>
                       <textarea
                         value={transaction.data}
                         onChange={(e) => handleTransactionChange('data', e.target.value)}
