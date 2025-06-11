@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { AbiCoder, FunctionFragment, Interface, keccak256, toUtf8Bytes, getAddress } from 'ethers'
 
@@ -33,7 +33,7 @@ interface MultiSendData {
   }>
 }
 
-export default function AbiToolsPage() {
+function AbiToolsPageContent() {
   const [activeTab, setActiveTab] = useState<TabType>('decode')
   const searchParams = useSearchParams()
 
@@ -90,6 +90,14 @@ export default function AbiToolsPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function AbiToolsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]"><div className="max-w-2xl mx-auto"><h1 className="text-3xl font-bold mb-8">ABI Encoding</h1><div className="text-center">Loading...</div></div></div>}>
+      <AbiToolsPageContent />
+    </Suspense>
   )
 }
 
