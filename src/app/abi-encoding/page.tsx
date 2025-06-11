@@ -21,6 +21,17 @@ interface NestedCall {
   raw: string
 }
 
+interface MultiSendData {
+  _isMultiSend: true
+  transactions: Array<{
+    operation: number
+    to: string
+    value: string
+    dataLength: number
+    data: string
+  }>
+}
+
 export default function AbiToolsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('decode')
 
@@ -34,8 +45,8 @@ export default function AbiToolsPage() {
           <button
             onClick={() => setActiveTab('decode')}
             className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'decode'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
               }`}
           >
             Decode
@@ -43,8 +54,8 @@ export default function AbiToolsPage() {
           <button
             onClick={() => setActiveTab('encode')}
             className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'encode'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
               }`}
           >
             Encode
@@ -78,6 +89,7 @@ function DecodeTab() {
   const [decodedResult, setDecodedResult] = useState('')
   const [isFunction, setIsFunction] = useState(true)
   const [autoDetect, setAutoDetect] = useState(true)
+  const [decodeMultiSend, setDecodeMultiSend] = useState(true)
   const [loading, setLoading] = useState(false)
 
   const lookupSignature = async (selector: string) => {
@@ -128,6 +140,60 @@ function DecodeTab() {
       if (selector.length === 10) {
         lookupSignature(selector)
       }
+    }
+  }
+
+  const decodeMultiSendData = (data: string): any => {
+    try {
+      // Remove 0x prefix if present
+      let hexData = data.startsWith('0x') ? data.substring(2) : data
+
+      const transactions: any[] = []
+      let offset = 0
+
+      while (offset < hexData.length) {
+        // Each transaction is packed as:
+        // operation (1 byte) + to (20 bytes) + value (32 bytes) + dataLength (32 bytes) + data (variable)
+
+        if (offset + 170 > hexData.length) break // Need at least 85 bytes (170 hex chars) for header
+
+        // Parse operation (1 byte)
+        const operation = parseInt(hexData.substring(offset, offset + 2), 16)
+        offset += 2
+
+        // Parse to address (20 bytes)
+        const to = '0x' + hexData.substring(offset, offset + 40)
+        offset += 40
+
+        // Parse value (32 bytes)
+        const valueHex = hexData.substring(offset, offset + 64)
+        const value = BigInt('0x' + valueHex).toString()
+        offset += 64
+
+        // Parse data length (32 bytes)
+        const dataLengthHex = hexData.substring(offset, offset + 64)
+        const dataLength = parseInt(dataLengthHex, 16)
+        offset += 64
+
+        // Parse data (variable length)
+        const txData = dataLength > 0 ? '0x' + hexData.substring(offset, offset + dataLength * 2) : '0x'
+        offset += dataLength * 2
+
+        transactions.push({
+          operation,
+          to,
+          value,
+          dataLength,
+          data: txData
+        })
+      }
+
+      return {
+        _isMultiSend: true,
+        transactions
+      }
+    } catch (e) {
+      return null
     }
   }
 
@@ -183,7 +249,17 @@ function DecodeTab() {
 
                 // Recursively decode bytes parameters
                 if (param.type === 'bytes' && typeof paramValue === 'string') {
-                  paramValue = await decodeNestedBytes(paramValue)
+                  // First try multi-send decoding if enabled
+                  if (decodeMultiSend) {
+                    const multiSendResult = decodeMultiSendData(paramValue)
+                    if (multiSendResult) {
+                      paramValue = multiSendResult
+                    } else {
+                      paramValue = await decodeNestedBytes(paramValue)
+                    }
+                  } else {
+                    paramValue = await decodeNestedBytes(paramValue)
+                  }
                 }
 
                 processedParams[param.name || `param${i}`] = paramValue
@@ -217,7 +293,11 @@ function DecodeTab() {
     return obj && typeof obj === 'object' && obj._isNestedCall === true
   }
 
-  const formatDecodedResult = (data: any, indent: number = 0): string => {
+  const isMultiSend = (obj: any): obj is MultiSendData => {
+    return obj && typeof obj === 'object' && obj._isMultiSend === true
+  }
+
+  const formatDecodedResult = async (data: any, indent: number = 0): Promise<string> => {
     const spaces = '  '.repeat(indent)
 
     if (isNestedCall(data)) {
@@ -227,31 +307,58 @@ function DecodeTab() {
       result += `${spaces}📋 Parameters:\n`
 
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value)) {
+        if (isNestedCall(value) || isMultiSend(value)) {
           result += `${spaces}  ${key}:\n`
-          result += formatDecodedResult(value, indent + 2)
+          result += await formatDecodedResult(value, indent + 2)
         } else {
-          result += `${spaces}  ${key}: ${formatValue(value)}\n`
+          result += `${spaces}  ${key}: ${await formatValue(value)}\n`
         }
       }
 
       result += `${spaces}🔤 Raw Data: ${data.raw}\n`
       return result
+    } else if (isMultiSend(data)) {
+      // Format multi-send transactions
+      let result = `${spaces}📦 Multi-Send (${data.transactions.length} transactions):\n`
+
+      for (let i = 0; i < data.transactions.length; i++) {
+        const tx = data.transactions[i]
+        result += `${spaces}  [${i}] Transaction:\n`
+        result += `${spaces}    Operation: ${tx.operation} (${tx.operation === 0 ? 'Call' : tx.operation === 1 ? 'DelegateCall' : 'Unknown'})\n`
+        result += `${spaces}    To: ${tx.to}\n`
+        result += `${spaces}    Value: ${tx.value}\n`
+        result += `${spaces}    Data Length: ${tx.dataLength}\n`
+
+        if (tx.data && tx.data !== '0x') {
+          // Try to decode the nested transaction data
+          const nestedDecoded = await decodeNestedBytes(tx.data)
+          if (isNestedCall(nestedDecoded)) {
+            result += `${spaces}    Decoded Call:\n`
+            result += await formatDecodedResult(nestedDecoded, indent + 3)
+          } else {
+            result += `${spaces}    Data: ${tx.data}\n`
+          }
+        } else {
+          result += `${spaces}    Data: (empty)\n`
+        }
+      }
+
+      return result
     } else if (Array.isArray(data)) {
       let result = `${spaces}[\n`
       for (let i = 0; i < data.length; i++) {
-        result += `${spaces}  [${i}]: ${formatValue(data[i])}\n`
+        result += `${spaces}  [${i}]: ${await formatValue(data[i])}\n`
       }
       result += `${spaces}]\n`
       return result
     } else {
-      return `${spaces}${formatValue(data)}\n`
+      return `${spaces}${await formatValue(data)}\n`
     }
   }
 
-  const formatValue = (value: any): string => {
-    if (isNestedCall(value)) {
-      return '\n' + formatDecodedResult(value, 1)
+  const formatValue = async (value: any): Promise<string> => {
+    if (isNestedCall(value) || isMultiSend(value)) {
+      return '\n' + await formatDecodedResult(value, 1)
     } else {
       return String(value)
     }
@@ -297,7 +404,17 @@ function DecodeTab() {
 
         // Try to decode nested bytes parameters
         if (param.type === 'bytes' && typeof paramValue === 'string') {
-          paramValue = await decodeNestedBytes(paramValue)
+          // First try multi-send decoding if enabled
+          if (decodeMultiSend) {
+            const multiSendResult = decodeMultiSendData(paramValue)
+            if (multiSendResult) {
+              paramValue = multiSendResult
+            } else {
+              paramValue = await decodeNestedBytes(paramValue)
+            }
+          } else {
+            paramValue = await decodeNestedBytes(paramValue)
+          }
         }
 
         processedResult[param.name || `param${i}`] = paramValue
@@ -306,11 +423,11 @@ function DecodeTab() {
       // Format the result nicely
       let result = `📞 Function: ${signature}\n📋 Parameters:\n`
       for (const [key, value] of Object.entries(processedResult)) {
-        if (isNestedCall(value)) {
+        if (isNestedCall(value) || isMultiSend(value)) {
           result += `  ${key}:\n`
-          result += formatDecodedResult(value, 2)
+          result += await formatDecodedResult(value, 2)
         } else {
-          result += `  ${key}: ${formatValue(value)}\n`
+          result += `  ${key}: ${await formatValue(value)}\n`
         }
       }
 
@@ -323,7 +440,7 @@ function DecodeTab() {
   // Auto-decode when inputs change
   useEffect(() => {
     decodeData()
-  }, [abiData, signature, isFunction])
+  }, [abiData, signature, isFunction, decodeMultiSend])
 
   return (
     <div className="space-y-6">
@@ -366,10 +483,27 @@ function DecodeTab() {
           <input
             type="checkbox"
             checked={autoDetect}
-            onChange={(e) => setAutoDetect(e.target.checked)}
+            onChange={(e) => {
+              const newValue = e.target.checked
+              setAutoDetect(newValue)
+              // Clear signature when toggling auto-detect
+              if (newValue) {
+                setSignature('') // Clear manual signature when enabling auto-detect
+              }
+            }}
             className="mr-2 cursor-pointer"
           />
           <span className="text-sm">Auto-lookup signature</span>
+        </label>
+
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={decodeMultiSend}
+            onChange={(e) => setDecodeMultiSend(e.target.checked)}
+            className="mr-2 cursor-pointer"
+          />
+          <span className="text-sm">Decode multi-send transactions</span>
         </label>
       </div>
 
@@ -411,6 +545,32 @@ function DecodeTab() {
           readOnly
           className="w-full h-48 p-3 border border-gray-300 rounded-lg dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-mono text-sm"
         />
+      </div>
+
+      {/* Example section */}
+      <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
+        <h3 className="text-lg font-semibold mb-4">Example</h3>
+        <div className="space-y-3 text-sm">
+          <div>
+            <span className="font-medium">Multi-Send Transaction:</span>
+            <button
+              onClick={() => {
+                setAbiData('0x8d80ff0a000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000f200a1f75f491f630037c4ccaa2bfa22363cec05a66100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044e2a9d5540000000000000000000000000000000000000000000000000000001b000000000000000000000000000000000000000000000000000000000000000068218e6000123450011cb3166a63d4523b2496ecc1fea665bb00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004eafb2ef30000000000000000000000000000')
+                setSignature('multiSend(bytes)')
+                setIsFunction(true)
+                setAutoDetect(true)
+                setDecodeMultiSend(true)
+              }}
+              className="ml-2 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors cursor-pointer"
+            >
+              Try Example
+            </button>
+          </div>
+          <div className="text-gray-600 dark:text-gray-400">
+            <p>This example shows a Safe wallet multi-send transaction with 2 batched calls.</p>
+            <p>Enable "Decode multi-send transactions" to see the parsed transaction structure.</p>
+          </div>
+        </div>
       </div>
     </div>
   )
