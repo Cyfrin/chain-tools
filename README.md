@@ -2,12 +2,15 @@
 
 ## About
 
-Chain Tools is a Next.js application that provides essential Ethereum utilities for developers and users. It features a gas estimator for calculating transaction costs across multiple chains, a wei converter for seamless unit conversions, and a fee leaderboard for comparing costs across different blockchains.
+Chain Tools is a Next.js application that provides essential Ethereum utilities for developers and users. It features comprehensive tools for gas estimation, unit conversion, ABI encoding/decoding, cryptographic hashing, and fee comparison across multiple blockchain networks.
 
 **Features:**
 - **Gas Estimator**: Calculate transaction costs with real-time ETH prices and gas prices across Ethereum, Arbitrum, Optimism, and zkSync Era
-- **Wei Converter**: Convert between Wei, Gwei, and ETH with real-time calculations and helpful reference guides
+- **Wei Converter**: Convert between Wei, Gwei, and ETH with real-time calculations and helpful reference guides  
+- **ABI Encoding**: Encode and decode ABI data for smart contract interactions with nested decoding support
 - **Fee Leaderboard**: Compare gas costs across different chains, ranked from cheapest to most expensive
+- **EIP-712 Hash**: Generate EIP-712 structured data hashes for typed data signing
+- **Safe Wallet Hash**: Calculate Safe wallet transaction hashes for multi-signature operations
 
 ## Getting Started
 
@@ -57,6 +60,19 @@ npm run dev
 - Quick reference guide with common values and gas price ranges
 - Clear all functionality for easy reset
 
+### ABI Encoding (`/abi-encoding`)
+- **Decode Tab**: Decode ABI-encoded data from smart contract function calls
+  - Auto-detection of function signatures using 4byte directory
+  - Manual signature input support
+  - Nested decoding for `bytes` parameters (multicalls, proxy calls, etc.)
+  - Human-readable formatted output with emojis and indentation
+  - Copy functionality for easy sharing
+- **Encode Tab**: Encode function parameters into ABI format
+  - Function signature input with validation
+  - JSON parameter array input
+  - Real-time encoding with error handling
+  - Example templates for common use cases
+
 ### Fee Leaderboard (`/fee-leaderboard`)
 - Compare transaction costs across multiple blockchain networks
 - Real-time gas prices fetched from each chain's RPC
@@ -65,6 +81,19 @@ npm run dev
   - ETH transfers (~21,000 gas)
   - Token swaps (~150,000 gas)
 - Data cached for 1 minute for optimal performance
+
+### EIP-712 Hash (`/eip712-hash`)
+- Generate EIP-712 structured data hashes
+- Support for typed data signing
+- Domain separator configuration
+- Message type definitions
+- Compliant with EIP-712 standard
+
+### Safe Wallet Hash (`/safe-hash`)
+- Calculate Safe wallet transaction hashes
+- Multi-signature transaction preparation
+- Safe-specific hash generation
+- Support for Safe transaction parameters
 
 ## Thank You
 
