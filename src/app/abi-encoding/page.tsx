@@ -13,6 +13,14 @@ const CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
 type TabType = 'encode' | 'decode'
 
+interface NestedCall {
+  _isNestedCall: true
+  function: string
+  selector: string
+  parameters: Record<string, any>
+  raw: string
+}
+
 export default function AbiToolsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('decode')
 
@@ -207,17 +215,21 @@ function DecodeTab() {
     return value
   }
 
+  const isNestedCall = (obj: any): obj is NestedCall => {
+    return obj && typeof obj === 'object' && obj._isNestedCall === true
+  }
+
   const formatDecodedResult = (data: any, indent: number = 0): string => {
     const spaces = '  '.repeat(indent)
     
-    if (data && typeof data === 'object' && data._isNestedCall) {
+    if (isNestedCall(data)) {
       // Format nested function call
       let result = `${spaces}📞 Function: ${data.function}\n`
       result += `${spaces}🔍 Selector: ${data.selector}\n`
       result += `${spaces}📋 Parameters:\n`
       
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (value && typeof value === 'object' && value._isNestedCall) {
+        if (isNestedCall(value)) {
           result += `${spaces}  ${key}:\n`
           result += formatDecodedResult(value, indent + 2)
         } else {
@@ -240,7 +252,7 @@ function DecodeTab() {
   }
 
   const formatValue = (value: any): string => {
-    if (value && typeof value === 'object' && value._isNestedCall) {
+    if (isNestedCall(value)) {
       return '\n' + formatDecodedResult(value, 1)
     } else {
       return String(value)
@@ -296,7 +308,7 @@ function DecodeTab() {
       // Format the result nicely
       let result = `📞 Function: ${signature}\n📋 Parameters:\n`
       for (const [key, value] of Object.entries(processedResult)) {
-        if (value && typeof value === 'object' && (value as any)._isNestedCall) {
+        if (isNestedCall(value)) {
           result += `  ${key}:\n`
           result += formatDecodedResult(value, 2)
         } else {
