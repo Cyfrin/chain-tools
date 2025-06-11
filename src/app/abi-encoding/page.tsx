@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { AbiCoder, FunctionFragment, Interface, keccak256, toUtf8Bytes } from 'ethers'
+import { AbiCoder, FunctionFragment, Interface, keccak256, toUtf8Bytes, getAddress } from 'ethers'
 
 // Client-side cache for signature lookups
 const signatureCache = new Map<string, {
@@ -33,21 +33,19 @@ export default function AbiToolsPage() {
         <div className="flex border-b border-gray-200 dark:border-gray-600 mb-6">
           <button
             onClick={() => setActiveTab('decode')}
-            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-              activeTab === 'decode'
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'decode'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
-            }`}
+              }`}
           >
             Decode
           </button>
           <button
             onClick={() => setActiveTab('encode')}
-            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-              activeTab === 'encode'
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'encode'
                 ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                 : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
-            }`}
+              }`}
           >
             Encode
           </button>
@@ -60,9 +58,9 @@ export default function AbiToolsPage() {
         {/* Attribution */}
         <div className="text-center text-xs text-gray-500 dark:text-gray-400 mt-8">
           Inspired by{' '}
-          <a 
-            href="https://openchain.xyz/tools/abi" 
-            target="_blank" 
+          <a
+            href="https://openchain.xyz/tools/abi"
+            target="_blank"
             rel="noopener noreferrer"
             className="text-blue-600 dark:text-blue-400 hover:underline"
           >
@@ -85,7 +83,7 @@ function DecodeTab() {
   const lookupSignature = async (selector: string) => {
     try {
       setLoading(true)
-      
+
       // Check client-side cache first
       const cached = signatureCache.get(selector)
       if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -95,17 +93,17 @@ function DecodeTab() {
         setLoading(false)
         return
       }
-      
+
       const response = await fetch(`/api/signature-lookup?selector=${selector}`)
       const data = await response.json()
-      
+
       if (data.signatures && data.signatures.length > 0) {
         // Cache the result
         signatureCache.set(selector, {
           signatures: data.signatures,
           timestamp: Date.now()
         })
-        
+
         // Use the first (most common) signature
         setSignature(data.signatures[0])
       } else {
@@ -124,7 +122,7 @@ function DecodeTab() {
 
   const handleAbiDataChange = (value: string) => {
     setAbiData(value)
-    
+
     if (autoDetect && isFunction && value.length >= 10) {
       const selector = value.startsWith('0x') ? value.substring(0, 10) : '0x' + value.substring(0, 8)
       if (selector.length === 10) {
@@ -139,11 +137,11 @@ function DecodeTab() {
         // Try to decode as function call (check if it starts with a function selector)
         if (value.length >= 10) {
           const selector = value.substring(0, 10)
-          
+
           // Check cache first
           const cached = signatureCache.get(selector)
           let signatures: string[] = []
-          
+
           if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
             signatures = cached.signatures
           } else {
@@ -151,7 +149,7 @@ function DecodeTab() {
             try {
               const response = await fetch(`/api/signature-lookup?selector=${selector}`)
               const data = await response.json()
-              
+
               if (data.signatures && data.signatures.length > 0) {
                 signatures = data.signatures
                 signatureCache.set(selector, {
@@ -163,34 +161,34 @@ function DecodeTab() {
               // Ignore API errors for nested decoding
             }
           }
-          
+
           if (signatures.length > 0) {
             const sig = signatures[0]
             const fragment = FunctionFragment.from(sig)
             const calldata = value.substring(10)
-            
+
             try {
               const nestedDecoded = AbiCoder.defaultAbiCoder().decode(fragment.inputs, '0x' + calldata)
-              
+
               // Recursively decode any nested bytes
               const processedParams: any = {}
               for (let i = 0; i < fragment.inputs.length; i++) {
                 const param = fragment.inputs[i]
                 let paramValue = nestedDecoded[i]
-                
+
                 // Convert BigInt to string
                 if (typeof paramValue === 'bigint') {
                   paramValue = paramValue.toString()
                 }
-                
+
                 // Recursively decode bytes parameters
                 if (param.type === 'bytes' && typeof paramValue === 'string') {
                   paramValue = await decodeNestedBytes(paramValue)
                 }
-                
+
                 processedParams[param.name || `param${i}`] = paramValue
               }
-              
+
               return {
                 _isNestedCall: true,
                 function: sig,
@@ -204,14 +202,14 @@ function DecodeTab() {
             }
           }
         }
-        
+
         // If no function signature found, return the raw value
         return value
       } catch (e) {
         return value
       }
     }
-    
+
     return value
   }
 
@@ -221,13 +219,13 @@ function DecodeTab() {
 
   const formatDecodedResult = (data: any, indent: number = 0): string => {
     const spaces = '  '.repeat(indent)
-    
+
     if (isNestedCall(data)) {
       // Format nested function call
       let result = `${spaces}📞 Function: ${data.function}\n`
       result += `${spaces}🔍 Selector: ${data.selector}\n`
       result += `${spaces}📋 Parameters:\n`
-      
+
       for (const [key, value] of Object.entries(data.parameters)) {
         if (isNestedCall(value)) {
           result += `${spaces}  ${key}:\n`
@@ -236,7 +234,7 @@ function DecodeTab() {
           result += `${spaces}  ${key}: ${formatValue(value)}\n`
         }
       }
-      
+
       result += `${spaces}🔤 Raw Data: ${data.raw}\n`
       return result
     } else if (Array.isArray(data)) {
@@ -285,26 +283,26 @@ function DecodeTab() {
 
       // Decode the data
       const decoded = AbiCoder.defaultAbiCoder().decode(fragment.inputs, '0x' + data)
-      
+
       // Process each parameter and decode nested bytes
       const processedResult: any = {}
       for (let i = 0; i < fragment.inputs.length; i++) {
         const param = fragment.inputs[i]
         let paramValue = decoded[i]
-        
+
         // Convert BigInt to string for JSON serialization
         if (typeof paramValue === 'bigint') {
           paramValue = paramValue.toString()
         }
-        
+
         // Try to decode nested bytes parameters
         if (param.type === 'bytes' && typeof paramValue === 'string') {
           paramValue = await decodeNestedBytes(paramValue)
         }
-        
+
         processedResult[param.name || `param${i}`] = paramValue
       }
-      
+
       // Format the result nicely
       let result = `📞 Function: ${signature}\n📋 Parameters:\n`
       for (const [key, value] of Object.entries(processedResult)) {
@@ -315,7 +313,7 @@ function DecodeTab() {
           result += `  ${key}: ${formatValue(value)}\n`
         }
       }
-      
+
       setDecodedResult(result)
     } catch (error) {
       setDecodedResult(`Decoding error: ${error}`)
@@ -332,7 +330,7 @@ function DecodeTab() {
       {/* Info Banner */}
       <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
         <p className="text-sm text-blue-800 dark:text-blue-200">
-          <strong>ABI Decoder:</strong> Decode ABI-encoded data from smart contract function calls. 
+          <strong>ABI Decoder:</strong> Decode ABI-encoded data from smart contract function calls.
           The tool can automatically detect function signatures using the 4byte directory and recursively decode nested bytes parameters.
         </p>
       </div>
@@ -363,7 +361,7 @@ function DecodeTab() {
           />
           <span className="text-sm">Data includes function selector</span>
         </label>
-        
+
         <label className="flex items-center">
           <input
             type="checkbox"
@@ -423,6 +421,22 @@ function EncodeTab() {
   const [jsonData, setJsonData] = useState('')
   const [encodedResult, setEncodedResult] = useState('')
 
+  const normalizeAddresses = (data: any[], fragment: FunctionFragment): any[] => {
+    return data.map((value, index) => {
+      const param = fragment.inputs[index]
+      if (param && param.type === 'address' && typeof value === 'string') {
+        try {
+          // Normalize address checksum
+          return getAddress(value.toLowerCase())
+        } catch (e) {
+          // If it's not a valid address, return as is and let ethers handle the error
+          return value
+        }
+      }
+      return value
+    })
+  }
+
   const encodeData = () => {
     if (!signature || !jsonData) {
       setEncodedResult('')
@@ -432,13 +446,16 @@ function EncodeTab() {
     try {
       // Parse the JSON data
       const parsedData = JSON.parse(jsonData)
-      
+
       // Parse the function signature
       const fragment = FunctionFragment.from(signature)
-      
+
+      // Normalize addresses in the data
+      const normalizedData = normalizeAddresses(parsedData, fragment)
+
       // Encode the data
-      const encoded = AbiCoder.defaultAbiCoder().encode(fragment.inputs, parsedData)
-      
+      const encoded = AbiCoder.defaultAbiCoder().encode(fragment.inputs, normalizedData)
+
       // Add function selector
       const result = fragment.selector + encoded.substring(2)
       setEncodedResult(result)
@@ -457,7 +474,7 @@ function EncodeTab() {
       {/* Info Banner */}
       <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
         <p className="text-sm text-blue-800 dark:text-blue-200">
-          <strong>ABI Encoder:</strong> Encode function parameters into ABI format for smart contract interactions. 
+          <strong>ABI Encoder:</strong> Encode function parameters into ABI format for smart contract interactions.
           Provide the function signature and parameters as a JSON array.
         </p>
       </div>
