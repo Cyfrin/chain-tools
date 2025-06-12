@@ -289,7 +289,7 @@ function DecodeTab() {
               // Recursively decode any nested bytes
               const processedParams: any = {}
               const decodableParams = FUNCTION_DECODE_CONFIG[sig] || null
-              
+
               for (let i = 0; i < fragment.inputs.length; i++) {
                 const param = fragment.inputs[i]
                 let paramValue = nestedDecoded[i]
@@ -303,7 +303,7 @@ function DecodeTab() {
                 if (param.type === 'bytes' && typeof paramValue === 'string') {
                   // Check if this parameter should be decoded based on function configuration
                   const shouldDecode = decodableParams === null || decodableParams.includes(i)
-                  
+
                   if (shouldDecode) {
                     // First try multi-send decoding if enabled
                     if (decodeMultiSend) {
@@ -451,7 +451,7 @@ function DecodeTab() {
       // Process each parameter and decode nested bytes
       const processedResult: any = {}
       const decodableParams = FUNCTION_DECODE_CONFIG[signature] || null
-      
+
       for (let i = 0; i < fragment.inputs.length; i++) {
         const param = fragment.inputs[i]
         let paramValue = decoded[i]
@@ -465,7 +465,7 @@ function DecodeTab() {
         if (param.type === 'bytes' && typeof paramValue === 'string') {
           // Check if this parameter should be decoded based on function configuration
           const shouldDecode = decodableParams === null || decodableParams.includes(i)
-          
+
           if (shouldDecode) {
             // First try multi-send decoding if enabled
             if (decodeMultiSend) {
@@ -605,8 +605,8 @@ function DecodeTab() {
                   setTimeout(() => setCopiedShare(false), 2000)
                 }}
                 className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-32 whitespace-nowrap ${copiedShare
-                    ? 'bg-green-700'
-                    : 'bg-green-600 hover:bg-green-700'
+                  ? 'bg-green-700'
+                  : 'bg-green-600 hover:bg-green-700'
                   }`}
               >
                 {copiedShare ? 'Copied!' : 'Share Decoded Data'}
@@ -618,8 +618,8 @@ function DecodeTab() {
                   setTimeout(() => setCopiedResult(false), 2000)
                 }}
                 className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-16 whitespace-nowrap ${copiedResult
-                    ? 'bg-blue-700'
-                    : 'bg-blue-600 hover:bg-blue-700'
+                  ? 'bg-blue-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
                   }`}
               >
                 {copiedResult ? 'Copied!' : 'Copy'}
