@@ -33,6 +33,15 @@ interface MultiSendData {
   }>
 }
 
+// Configuration for which bytes parameters should be decoded for specific functions
+const FUNCTION_DECODE_CONFIG: Record<string, number[]> = {
+  // For execTransaction, only decode the 'data' parameter (index 2), not 'signatures' (index 9)
+  'execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)': [2],
+  // For multiSend, decode the 'transactions' parameter (index 0)
+  'multiSend(bytes)': [0],
+  // Add more function configurations as needed
+}
+
 function AbiToolsPageContent() {
   const [activeTab, setActiveTab] = useState<TabType>('decode')
   const searchParams = useSearchParams()
@@ -188,6 +197,13 @@ function DecodeTab() {
 
         // Parse operation (1 byte)
         const operation = parseInt(hexData.substring(offset, offset + 2), 16)
+
+        // Validate operation - must be 0 (Call) or 1 (DelegateCall)
+        // If not, this is likely not multi-send data
+        if (operation !== 0 && operation !== 1) {
+          return null
+        }
+
         offset += 2
 
         // Parse to address (20 bytes)
@@ -217,10 +233,15 @@ function DecodeTab() {
         })
       }
 
-      return {
-        _isMultiSend: true,
-        transactions
+      // Only return multi-send result if we actually found valid transactions
+      if (transactions.length > 0) {
+        return {
+          _isMultiSend: true,
+          transactions
+        }
       }
+
+      return null
     } catch (e) {
       return null
     }
@@ -267,6 +288,8 @@ function DecodeTab() {
 
               // Recursively decode any nested bytes
               const processedParams: any = {}
+              const decodableParams = FUNCTION_DECODE_CONFIG[sig] || null
+              
               for (let i = 0; i < fragment.inputs.length; i++) {
                 const param = fragment.inputs[i]
                 let paramValue = nestedDecoded[i]
@@ -276,18 +299,23 @@ function DecodeTab() {
                   paramValue = paramValue.toString()
                 }
 
-                // Recursively decode bytes parameters
+                // Recursively decode bytes parameters only if allowed by configuration
                 if (param.type === 'bytes' && typeof paramValue === 'string') {
-                  // First try multi-send decoding if enabled
-                  if (decodeMultiSend) {
-                    const multiSendResult = decodeMultiSendData(paramValue)
-                    if (multiSendResult) {
-                      paramValue = multiSendResult
+                  // Check if this parameter should be decoded based on function configuration
+                  const shouldDecode = decodableParams === null || decodableParams.includes(i)
+                  
+                  if (shouldDecode) {
+                    // First try multi-send decoding if enabled
+                    if (decodeMultiSend) {
+                      const multiSendResult = decodeMultiSendData(paramValue)
+                      if (multiSendResult) {
+                        paramValue = multiSendResult
+                      } else {
+                        paramValue = await decodeNestedBytes(paramValue)
+                      }
                     } else {
                       paramValue = await decodeNestedBytes(paramValue)
                     }
-                  } else {
-                    paramValue = await decodeNestedBytes(paramValue)
                   }
                 }
 
@@ -422,6 +450,8 @@ function DecodeTab() {
 
       // Process each parameter and decode nested bytes
       const processedResult: any = {}
+      const decodableParams = FUNCTION_DECODE_CONFIG[signature] || null
+      
       for (let i = 0; i < fragment.inputs.length; i++) {
         const param = fragment.inputs[i]
         let paramValue = decoded[i]
@@ -431,18 +461,23 @@ function DecodeTab() {
           paramValue = paramValue.toString()
         }
 
-        // Try to decode nested bytes parameters
+        // Try to decode nested bytes parameters only if allowed by configuration
         if (param.type === 'bytes' && typeof paramValue === 'string') {
-          // First try multi-send decoding if enabled
-          if (decodeMultiSend) {
-            const multiSendResult = decodeMultiSendData(paramValue)
-            if (multiSendResult) {
-              paramValue = multiSendResult
+          // Check if this parameter should be decoded based on function configuration
+          const shouldDecode = decodableParams === null || decodableParams.includes(i)
+          
+          if (shouldDecode) {
+            // First try multi-send decoding if enabled
+            if (decodeMultiSend) {
+              const multiSendResult = decodeMultiSendData(paramValue)
+              if (multiSendResult) {
+                paramValue = multiSendResult
+              } else {
+                paramValue = await decodeNestedBytes(paramValue)
+              }
             } else {
               paramValue = await decodeNestedBytes(paramValue)
             }
-          } else {
-            paramValue = await decodeNestedBytes(paramValue)
           }
         }
 
@@ -569,11 +604,10 @@ function DecodeTab() {
                   setCopiedShare(true)
                   setTimeout(() => setCopiedShare(false), 2000)
                 }}
-                className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-32 whitespace-nowrap ${
-                  copiedShare 
-                    ? 'bg-green-700' 
+                className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-32 whitespace-nowrap ${copiedShare
+                    ? 'bg-green-700'
                     : 'bg-green-600 hover:bg-green-700'
-                }`}
+                  }`}
               >
                 {copiedShare ? 'Copied!' : 'Share Decoded Data'}
               </button>
@@ -583,11 +617,10 @@ function DecodeTab() {
                   setCopiedResult(true)
                   setTimeout(() => setCopiedResult(false), 2000)
                 }}
-                className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-16 whitespace-nowrap ${
-                  copiedResult 
-                    ? 'bg-blue-700' 
+                className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-16 whitespace-nowrap ${copiedResult
+                    ? 'bg-blue-700'
                     : 'bg-blue-600 hover:bg-blue-700'
-                }`}
+                  }`}
               >
                 {copiedResult ? 'Copied!' : 'Copy'}
               </button>
@@ -604,8 +637,8 @@ function DecodeTab() {
 
       {/* Example section */}
       <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-        <h3 className="text-lg font-semibold mb-4">Example</h3>
-        <div className="space-y-3 text-sm">
+        <h3 className="text-lg font-semibold mb-4">Examples</h3>
+        <div className="space-y-4 text-sm">
           <div>
             <span className="font-medium">Multi-Send Transaction:</span>
             <button
@@ -620,10 +653,32 @@ function DecodeTab() {
             >
               Try Example
             </button>
+            <div className="text-gray-600 dark:text-gray-400 mt-1">
+              <p>Safe wallet multi-send transaction with 2 batched calls.</p>
+            </div>
           </div>
+
+          <div>
+            <span className="font-medium">Safe Wallet execTransaction:</span>
+            <button
+              onClick={() => {
+                setAbiData('0x6a76120200000000000000000000000078e30497a3c7527d953c6b1e3541b021a98ac43c0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000084617ba0370000000000000000000000005a7d6b2f92c77fad6ccabd7ee0624e64907eaf3e000000000000000000000000000000000000000000000002b5e3af16b18800000000000000000000000000009467919138e36f0252886519f34a0f8016ddb3a30000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000F8Cade19b26a2B970F2dEF5eA9ECcF1bda3d118600000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000')
+                setSignature('execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)')
+                setIsFunction(true)
+                setAutoDetect(true)
+                setDecodeMultiSend(true)
+              }}
+              className="ml-2 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors cursor-pointer"
+            >
+              Try Example
+            </button>
+            <div className="text-gray-600 dark:text-gray-400 mt-1">
+              <p>Safe wallet transaction with nested function call (supply).</p>
+            </div>
+          </div>
+
           <div className="text-gray-600 dark:text-gray-400">
-            <p>This example shows a Safe wallet multi-send transaction with 2 batched calls.</p>
-            <p>Enable "Decode multi-send transactions" to see the parsed transaction structure.</p>
+            <p>Enable "Decode multi-send transactions" to see nested transaction parsing.</p>
           </div>
         </div>
       </div>

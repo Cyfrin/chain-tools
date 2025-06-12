@@ -41,14 +41,13 @@ async function fetchFrom4byte(selector: string): Promise<string[]> {
     }
 
     const data = await response.json()
-    console.log(data)
 
     if (!data.results || !Array.isArray(data.results)) {
       return []
     }
 
     // Extract signatures and verify they match the selector
-    const validResults: Array<{signature: string, created_at: string}> = []
+    const validResults: Array<{ signature: string, created_at: string }> = []
     for (const result of data.results) {
       if (result.text_signature) {
         const signature = result.text_signature.trim()
@@ -63,7 +62,7 @@ async function fetchFrom4byte(selector: string): Promise<string[]> {
 
     // Sort by creation date (oldest first) to get the most canonical signatures
     validResults.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    
+
     return validResults.map(result => result.signature)
   } catch (error) {
     console.error('Error fetching from 4byte:', error)
