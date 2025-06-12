@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { ethers } from 'ethers';
+import { useSearchParams } from 'next/navigation'
+
 
 interface SafeHashResult {
   domainHash: string;
@@ -81,6 +83,17 @@ const SAFE_API_URLS: { [key: string]: string } = {
 const SAFE_VERSIONS = ['1.4.1', '1.3.0', '1.2.0', '1.1.1', '1.0.0'];
 
 export default function SafeHash() {
+  return (
+    <Suspense fallback={<div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]"><div className="max-w-2xl mx-auto"><h1 className="text-3xl font-bold mb-8">ABI Encoding</h1><div className="text-center">Loading...</div></div></div>}>
+      <SafeHashPageContent />
+    </Suspense>
+  )
+}
+
+function SafeHashPageContent() {
+  const searchParams = useSearchParams();
+  const [copiedUrl, setCopiedUrl] = useState(false);
+
   const [transaction, setTransaction] = useState<SafeTransaction>({
     to: '',
     value: '0',
@@ -114,6 +127,87 @@ export default function SafeHash() {
 
   // Ref for scrolling to results
   const resultsRef = useRef<HTMLDivElement>(null);
+
+  // 2️⃣ on mount (or whenever the URL changes), populate your form from ?-params
+  useEffect(() => {
+    if (!searchParams) return;
+
+    // Safe address
+    const safe = searchParams.get('safeAddress');
+    if (safe && ethers.isAddress(safe)) {
+      setSafeAddress(safe);
+    }
+
+    // Chain
+    const chain = searchParams.get('chainId');
+    if (chain && CHAIN_IDS[chain]) {
+      setChainId(chain);
+    }
+
+    // Safe version
+    const version = searchParams.get('safeVersion');
+    if (version && SAFE_VERSIONS.includes(version)) {
+      setSafeVersion(version);
+    }
+
+    // Transaction fields
+    const txUpdate: Partial<SafeTransaction> = {};
+    const to = searchParams.get('to');
+    if (to && ethers.isAddress(to)) txUpdate.to = to;
+    if (searchParams.get('value')) txUpdate.value = searchParams.get('value')!;
+    if (searchParams.get('data')) txUpdate.data = searchParams.get('data')!;
+    if (searchParams.get('operation')) txUpdate.operation = Number(searchParams.get('operation'));
+    if (searchParams.get('safeTxGas')) txUpdate.safeTxGas = searchParams.get('safeTxGas')!;
+    if (searchParams.get('baseGas')) txUpdate.baseGas = searchParams.get('baseGas')!;
+    if (searchParams.get('gasPrice')) txUpdate.gasPrice = searchParams.get('gasPrice')!;
+    if (searchParams.get('gasToken')) txUpdate.gasToken = searchParams.get('gasToken')!;
+    if (searchParams.get('refundReceiver'))
+      txUpdate.refundReceiver = searchParams.get('refundReceiver')!;
+    if (searchParams.get('nonce')) txUpdate.nonce = searchParams.get('nonce')!;
+    setTransaction(prev => ({ ...prev, ...txUpdate }));
+
+    // Nested-safe fields
+    const nestedAddr = searchParams.get('nestedSafeAddress');
+    if (nestedAddr && ethers.isAddress(nestedAddr)) {
+      setIsNestedSafe(true);
+      setNestedSafeAddress(nestedAddr);
+    }
+    const nestedNonceParam = searchParams.get('nestedSafeNonce');
+    if (nestedNonceParam) {
+      setNestedSafeNonce(nestedNonceParam);
+    }
+  }, [searchParams]);
+
+  // 📋 Copy current form into a shareable URL
+  const copyShareableUrl = () => {
+    const url = new URL(window.location.href);
+    url.search = ''; // clear any old params
+    const params: Record<string, string> = {
+      safeAddress,
+      chainId,
+      safeVersion,
+      nonce: transaction.nonce,
+      to: transaction.to,
+      value: transaction.value,
+      data: transaction.data,
+      operation: transaction.operation.toString(),
+      safeTxGas: transaction.safeTxGas,
+      baseGas: transaction.baseGas,
+      gasPrice: transaction.gasPrice,
+      gasToken: transaction.gasToken,
+      refundReceiver: transaction.refundReceiver,
+    };
+    if (isNestedSafe) {
+      params.nestedSafeAddress = nestedSafeAddress;
+      params.nestedSafeNonce = nestedSafeNonce;
+    }
+    Object.entries(params).forEach(([k, v]) => {
+      if (v) url.searchParams.set(k, v);
+    });
+    navigator.clipboard.writeText(url.toString());
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 1000);
+  };
 
   const calculateSafeHash = async (): Promise<SafeHashResult> => {
     try {
@@ -293,7 +387,7 @@ export default function SafeHash() {
     try {
       const endpoint = `${apiUrl}/api/v1/safes/${safeAddress}/multisig-transactions/?nonce=${transaction.nonce}`;
       const response = await fetch(endpoint);
-      
+
       if (!response.ok) {
         throw new Error(`API request failed: ${response.status}`);
       }
@@ -428,12 +522,24 @@ export default function SafeHash() {
             <div className="lg:col-span-2">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-semibold">Transaction Details</h3>
-                <button
-                  onClick={loadExample}
-                  className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium cursor-pointer"
-                >
-                  Load Example
-                </button>
+                <div className="justify-end">
+                  <button
+                    onClick={copyShareableUrl}
+                    className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 
+               dark:text-blue-400 dark:hover:text-blue-200 
+               font-medium rounded cursor-pointer transition"
+                  >
+                    {copiedUrl ? 'Copied!' : 'Copy Shareable URL'}
+                  </button>
+                  <button
+                    onClick={loadExample}
+                    className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 
+               dark:text-blue-400 dark:hover:text-blue-200 
+               font-medium rounded cursor-pointer transition"
+                  >
+                    Load Example
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-4">
@@ -527,11 +633,10 @@ export default function SafeHash() {
                         value={transaction.to}
                         onChange={(e) => handleTransactionChange('to', e.target.value)}
                         placeholder="0x... (will be filled by API or enter manually)"
-                        className={`w-full p-3 border rounded-lg dark:bg-gray-800 font-mono text-sm ${
-                          apiFieldsError.to 
-                            ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20' 
-                            : 'border-gray-300 dark:border-gray-600'
-                        }`}
+                        className={`w-full p-3 border rounded-lg dark:bg-gray-800 font-mono text-sm ${apiFieldsError.to
+                          ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
+                          : 'border-gray-300 dark:border-gray-600'
+                          }`}
                       />
                     </div>
 
@@ -558,11 +663,10 @@ export default function SafeHash() {
                         onChange={(e) => handleTransactionChange('data', e.target.value)}
                         placeholder="0x... (will be filled by API or enter manually)"
                         rows={3}
-                        className={`w-full p-3 border rounded-lg dark:bg-gray-800 font-mono text-sm ${
-                          apiFieldsError.data 
-                            ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20' 
-                            : 'border-gray-300 dark:border-gray-600'
-                        }`}
+                        className={`w-full p-3 border rounded-lg dark:bg-gray-800 font-mono text-sm ${apiFieldsError.data
+                          ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
+                          : 'border-gray-300 dark:border-gray-600'
+                          }`}
                       />
                     </div>
                   </div>
@@ -604,69 +708,69 @@ export default function SafeHash() {
 
                 <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
                   <h4 className="text-md font-semibold mb-4">Additional Transaction Parameters</h4>
-                  
+
                   <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Safe Tx Gas
-                    </label>
-                    <input
-                      type="text"
-                      value={transaction.safeTxGas}
-                      onChange={(e) => handleTransactionChange('safeTxGas', e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
-                    />
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Safe Tx Gas
+                      </label>
+                      <input
+                        type="text"
+                        value={transaction.safeTxGas}
+                        onChange={(e) => handleTransactionChange('safeTxGas', e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Base Gas
+                      </label>
+                      <input
+                        type="text"
+                        value={transaction.baseGas}
+                        onChange={(e) => handleTransactionChange('baseGas', e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Gas Price
+                      </label>
+                      <input
+                        type="text"
+                        value={transaction.gasPrice}
+                        onChange={(e) => handleTransactionChange('gasPrice', e.target.value)}
+                        className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Gas Token
+                      </label>
+                      <input
+                        type="text"
+                        value={transaction.gasToken}
+                        onChange={(e) => handleTransactionChange('gasToken', e.target.value)}
+                        placeholder="0x0000000000000000000000000000000000000000"
+                        className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+                      />
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium mb-2">
-                      Base Gas
+                      Refund Receiver
                     </label>
                     <input
                       type="text"
-                      value={transaction.baseGas}
-                      onChange={(e) => handleTransactionChange('baseGas', e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Gas Price
-                    </label>
-                    <input
-                      type="text"
-                      value={transaction.gasPrice}
-                      onChange={(e) => handleTransactionChange('gasPrice', e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Gas Token
-                    </label>
-                    <input
-                      type="text"
-                      value={transaction.gasToken}
-                      onChange={(e) => handleTransactionChange('gasToken', e.target.value)}
+                      value={transaction.refundReceiver}
+                      onChange={(e) => handleTransactionChange('refundReceiver', e.target.value)}
                       placeholder="0x0000000000000000000000000000000000000000"
                       className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
                     />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Refund Receiver
-                  </label>
-                  <input
-                    type="text"
-                    value={transaction.refundReceiver}
-                    onChange={(e) => handleTransactionChange('refundReceiver', e.target.value)}
-                    placeholder="0x0000000000000000000000000000000000000000"
-                    className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
-                  />
                   </div>
                 </div>
 
@@ -690,7 +794,7 @@ export default function SafeHash() {
                       <div className="text-sm text-blue-800 dark:text-blue-200 mb-4">
                         <p><strong>Note:</strong> Nested safe functionality calculates a wrapper transaction that calls <code>approveHash()</code> on the outer safe.</p>
                       </div>
-                      
+
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-sm font-medium mb-2">
@@ -733,7 +837,7 @@ export default function SafeHash() {
 
             <div ref={resultsRef}>
               <h3 className="text-lg font-semibold mb-4">Results</h3>
-              
+
               {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
                   <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
@@ -752,7 +856,7 @@ export default function SafeHash() {
                   <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                     <h4 className="font-medium mb-2">Message Hash</h4>
                     <p className="font-mono text-xs break-all">
-                      {result.messageHash}  
+                      {result.messageHash}
                     </p>
                   </div>
 
@@ -773,7 +877,7 @@ export default function SafeHash() {
                   <h4 className="text-lg font-semibold text-purple-800 dark:text-purple-200 border-t border-purple-200 dark:border-purple-800 pt-4">
                     Nested Safe Transaction Results
                   </h4>
-                  
+
                   <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
                     <h5 className="font-medium mb-2">Nested Domain Hash</h5>
                     <p className="font-mono text-xs break-all">
@@ -818,6 +922,6 @@ export default function SafeHash() {
           </div>
         </div>
       </div>
-    </div>
+    </div >
   );
 }
