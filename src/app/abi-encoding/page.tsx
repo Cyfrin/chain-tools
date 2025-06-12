@@ -113,7 +113,8 @@ export default function AbiToolsPage() {
 function DecodeTab() {
   const [abiData, setAbiData] = useState('')
   const [signature, setSignature] = useState('')
-  const [decodedResult, setDecodedResult] = useState('')
+  const [decodedData, setDecodedData] = useState<any>(null)
+  const [showAsJson, setShowAsJson] = useState(false)
   const [isFunction, setIsFunction] = useState(true)
   const [autoDetect, setAutoDetect] = useState(true)
   const [decodeMultiSend, setDecodeMultiSend] = useState(true)
@@ -421,9 +422,79 @@ function DecodeTab() {
     }
   }
 
+  const formatJsonAsText = async (data: any): Promise<string> => {
+    if (!data) return ''
+    
+    if (data.error) {
+      return data.error
+    }
+
+    // Format the result nicely
+    let result = `📞 Function: ${data.function}\n📋 Parameters:\n`
+    for (const [key, value] of Object.entries(data.parameters)) {
+      if (isNestedCall(value) || isMultiSend(value)) {
+        result += `  ${key}:\n`
+        result += await formatDecodedResult(value, 2)
+      } else {
+        result += `  ${key}: ${await formatValue(value)}\n`
+      }
+    }
+    return result
+  }
+
+  const CopyButton = () => (
+    <button
+      onClick={async () => {
+        const content = showAsJson 
+          ? JSON.stringify(decodedData, null, 2)
+          : await formatJsonAsText(decodedData)
+        navigator.clipboard.writeText(content)
+        setCopiedResult(true)
+        setTimeout(() => setCopiedResult(false), 2000)
+      }}
+      className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-16 whitespace-nowrap ${copiedResult
+        ? 'bg-blue-700'
+        : 'bg-blue-600 hover:bg-blue-700'
+        }`}
+    >
+      {copiedResult ? 'Copied!' : 'Copy'}
+    </button>
+  )
+
+  const DisplayArea = () => {
+    const [displayContent, setDisplayContent] = useState('')
+
+    useEffect(() => {
+      const updateContent = async () => {
+        if (!decodedData) {
+          setDisplayContent('')
+          return
+        }
+
+        if (showAsJson) {
+          setDisplayContent(JSON.stringify(decodedData, null, 2))
+        } else {
+          const textContent = await formatJsonAsText(decodedData)
+          setDisplayContent(textContent)
+        }
+      }
+
+      updateContent()
+    }, [decodedData, showAsJson])
+
+    return (
+      <textarea
+        id="results"
+        value={displayContent}
+        readOnly
+        className="w-full h-48 p-3 border border-gray-300 rounded-lg dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+      />
+    )
+  }
+
   const decodeData = async () => {
     if (!abiData || !signature) {
-      setDecodedResult('')
+      setDecodedData(null)
       return
     }
 
@@ -436,7 +507,7 @@ function DecodeTab() {
       try {
         fragment = FunctionFragment.from(signature)
       } catch (e) {
-        setDecodedResult(`Error parsing signature: ${e}`)
+        setDecodedData({ error: `Error parsing signature: ${e}` })
         return
       }
 
@@ -484,20 +555,15 @@ function DecodeTab() {
         processedResult[param.name || `param${i}`] = paramValue
       }
 
-      // Format the result nicely
-      let result = `📞 Function: ${signature}\n📋 Parameters:\n`
-      for (const [key, value] of Object.entries(processedResult)) {
-        if (isNestedCall(value) || isMultiSend(value)) {
-          result += `  ${key}:\n`
-          result += await formatDecodedResult(value, 2)
-        } else {
-          result += `  ${key}: ${await formatValue(value)}\n`
-        }
+      // Store as JSON structure
+      const result = {
+        function: signature,
+        parameters: processedResult
       }
 
-      setDecodedResult(result)
+      setDecodedData(result)
     } catch (error) {
-      setDecodedResult(`Decoding error: ${error}`)
+      setDecodedData({ error: `Decoding error: ${error}` })
     }
   }
 
@@ -591,10 +657,34 @@ function DecodeTab() {
       {/* Results */}
       <div>
         <div className="flex justify-between items-center mb-2">
-          <label htmlFor="results" className="block text-sm font-medium">
-            Decoded Result
-          </label>
-          {decodedResult && (
+          <div className="flex items-center gap-4">
+            <label htmlFor="results" className="block text-sm font-medium">
+              Decoded Result
+            </label>
+            {decodedData && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAsJson(false)}
+                  className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${!showAsJson
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                >
+                  Text
+                </button>
+                <button
+                  onClick={() => setShowAsJson(true)}
+                  className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${showAsJson
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                >
+                  JSON
+                </button>
+              </div>
+            )}
+          </div>
+          {decodedData && (
             <div className="flex gap-2">
               <button
                 onClick={() => {
@@ -611,28 +701,11 @@ function DecodeTab() {
               >
                 {copiedShare ? 'Copied!' : 'Share Decoded Data'}
               </button>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(decodedResult)
-                  setCopiedResult(true)
-                  setTimeout(() => setCopiedResult(false), 2000)
-                }}
-                className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-16 whitespace-nowrap ${copiedResult
-                  ? 'bg-blue-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
-                  }`}
-              >
-                {copiedResult ? 'Copied!' : 'Copy'}
-              </button>
+              <CopyButton />
             </div>
           )}
         </div>
-        <textarea
-          id="results"
-          value={decodedResult}
-          readOnly
-          className="w-full h-48 p-3 border border-gray-300 rounded-lg dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-mono text-sm"
-        />
+        <DisplayArea />
       </div>
 
       {/* Example section */}
