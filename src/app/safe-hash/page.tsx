@@ -156,7 +156,10 @@ function SafeHashPageContent() {
     if (to && ethers.isAddress(to)) txUpdate.to = to;
     if (searchParams.get('value')) txUpdate.value = searchParams.get('value')!;
     if (searchParams.get('data')) txUpdate.data = searchParams.get('data')!;
-    if (searchParams.get('operation')) txUpdate.operation = Number(searchParams.get('operation'));
+    const operationParam = searchParams.get('operation');
+    if (operationParam && !isNaN(Number(operationParam))) {
+      txUpdate.operation = Number(operationParam);
+    }
     if (searchParams.get('safeTxGas')) txUpdate.safeTxGas = searchParams.get('safeTxGas')!;
     if (searchParams.get('baseGas')) txUpdate.baseGas = searchParams.get('baseGas')!;
     if (searchParams.get('gasPrice')) txUpdate.gasPrice = searchParams.get('gasPrice')!;
