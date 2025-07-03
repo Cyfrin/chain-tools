@@ -10,7 +10,7 @@ export default function GasEstimator() {
   const [gasPrice, setGasPrice] = useState<string>('');
   const [gasAmount, setGasAmount] = useState<string>('');
   const [selectedChain, setSelectedChain] = useState<string>('ethereum');
-  const [gasPreset, setGasPreset] = useState<string>('custom');
+  const [gasPreset, setGasPreset] = useState<string>('transfer');
   const [loading, setLoading] = useState(true);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -21,6 +21,11 @@ export default function GasEstimator() {
   const totalCostETH = gasPrice && gasAmount
     ? ((parseFloat(gasPrice) * parseFloat(gasAmount)) / 1e9).toFixed(9)
     : '0';
+
+  useEffect(() => {
+    // Set initial gas amount based on default preset
+    handleGasPresetChange('transfer');
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
