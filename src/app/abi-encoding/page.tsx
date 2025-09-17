@@ -424,7 +424,7 @@ function DecodeTab() {
 
   const formatJsonAsText = async (data: any): Promise<string> => {
     if (!data) return ''
-    
+
     if (data.error) {
       return data.error
     }
@@ -445,7 +445,7 @@ function DecodeTab() {
   const CopyButton = () => (
     <button
       onClick={async () => {
-        const content = showAsJson 
+        const content = showAsJson
           ? JSON.stringify(decodedData, null, 2)
           : await formatJsonAsText(decodedData)
         navigator.clipboard.writeText(content)
@@ -453,8 +453,8 @@ function DecodeTab() {
         setTimeout(() => setCopiedResult(false), 2000)
       }}
       className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-16 whitespace-nowrap ${copiedResult
-        ? 'bg-blue-700'
-        : 'bg-blue-600 hover:bg-blue-700'
+        ? 'bg-green-700'
+        : 'bg-green-600 hover:bg-green-700'
         }`}
     >
       {copiedResult ? 'Copied!' : 'Copy'}
@@ -702,6 +702,16 @@ function DecodeTab() {
                 {copiedShare ? 'Copied!' : 'Share Decoded Data'}
               </button>
               <CopyButton />
+              <button
+                onClick={() => {
+                  const url = new URL(window.location.origin + '/safe-hash')
+                  url.searchParams.set('data', abiData)
+                  window.open(url.toString(), '_blank')
+                }}
+                className="px-3 py-1 text-xs text-white bg-green-600 hover:bg-green-700 rounded transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1"
+              >
+                Send to Safe Hash Calculator ↗
+              </button>
             </div>
           )}
         </div>
