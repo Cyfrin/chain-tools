@@ -118,6 +118,7 @@ function DecodeTab() {
   const [isFunction, setIsFunction] = useState(true)
   const [autoDetect, setAutoDetect] = useState(true)
   const [decodeMultiSend, setDecodeMultiSend] = useState(true)
+  const [showRawData, setShowRawData] = useState(false)
   const [loading, setLoading] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
   const [copiedResult, setCopiedResult] = useState(false)
@@ -130,6 +131,33 @@ function DecodeTab() {
       handleAbiDataChange(data)
     }
   }, [searchParams])
+
+  // Load preferences from localStorage on component mount
+  useEffect(() => {
+    const savedPreferences = localStorage.getItem('abiDecoderPreferences')
+    if (savedPreferences) {
+      try {
+        const prefs = JSON.parse(savedPreferences)
+        if (typeof prefs.isFunction === 'boolean') setIsFunction(prefs.isFunction)
+        if (typeof prefs.autoDetect === 'boolean') setAutoDetect(prefs.autoDetect)
+        if (typeof prefs.decodeMultiSend === 'boolean') setDecodeMultiSend(prefs.decodeMultiSend)
+        if (typeof prefs.showRawData === 'boolean') setShowRawData(prefs.showRawData)
+      } catch (e) {
+        console.error('Failed to load preferences:', e)
+      }
+    }
+  }, [])
+
+  // Save preferences to localStorage whenever they change
+  useEffect(() => {
+    const preferences = {
+      isFunction,
+      autoDetect,
+      decodeMultiSend,
+      showRawData
+    }
+    localStorage.setItem('abiDecoderPreferences', JSON.stringify(preferences))
+  }, [isFunction, autoDetect, decodeMultiSend, showRawData])
 
   const lookupSignature = async (selector: string) => {
     try {
@@ -355,7 +383,7 @@ function DecodeTab() {
     return obj && typeof obj === 'object' && obj._isMultiSend === true
   }
 
-  const formatDecodedResult = async (data: any, indent: number = 0): Promise<string> => {
+  const formatDecodedResult = async (data: any, indent: number = 0, includeRawData: boolean = false): Promise<string> => {
     const spaces = '  '.repeat(indent)
 
     if (isNestedCall(data)) {
@@ -367,13 +395,15 @@ function DecodeTab() {
       for (const [key, value] of Object.entries(data.parameters)) {
         if (isNestedCall(value) || isMultiSend(value)) {
           result += `${spaces}  ${key}:\n`
-          result += await formatDecodedResult(value, indent + 2)
+          result += await formatDecodedResult(value, indent + 2, includeRawData)
         } else {
-          result += `${spaces}  ${key}: ${await formatValue(value)}\n`
+          result += `${spaces}  ${key}: ${await formatValue(value, includeRawData)}\n`
         }
       }
 
-      result += `${spaces}🔤 Raw Data: ${data.raw}\n`
+      if (includeRawData) {
+        result += `${spaces}🔤 Raw Data: ${data.raw}\n`
+      }
       return result
     } else if (isMultiSend(data)) {
       // Format multi-send transactions
@@ -392,7 +422,7 @@ function DecodeTab() {
           const nestedDecoded = await decodeNestedBytes(tx.data)
           if (isNestedCall(nestedDecoded)) {
             result += `${spaces}    Decoded Call:\n`
-            result += await formatDecodedResult(nestedDecoded, indent + 3)
+            result += await formatDecodedResult(nestedDecoded, indent + 3, includeRawData)
           } else {
             result += `${spaces}    Data: ${tx.data}\n`
           }
@@ -405,26 +435,26 @@ function DecodeTab() {
     } else if (Array.isArray(data)) {
       let result = `${spaces}[\n`
       for (let i = 0; i < data.length; i++) {
-        result += `${spaces}  [${i}]: ${await formatValue(data[i])}\n`
+        result += `${spaces}  [${i}]: ${await formatValue(data[i], includeRawData)}\n`
       }
       result += `${spaces}]\n`
       return result
     } else {
-      return `${spaces}${await formatValue(data)}\n`
+      return `${spaces}${await formatValue(data, includeRawData)}\n`
     }
   }
 
-  const formatValue = async (value: any): Promise<string> => {
+  const formatValue = async (value: any, includeRawData: boolean = false): Promise<string> => {
     if (isNestedCall(value) || isMultiSend(value)) {
-      return '\n' + await formatDecodedResult(value, 1)
+      return '\n' + await formatDecodedResult(value, 1, includeRawData)
     } else {
       return String(value)
     }
   }
 
-  const formatJsonAsText = async (data: any): Promise<string> => {
+  const formatJsonAsText = async (data: any, includeRawData: boolean = false): Promise<string> => {
     if (!data) return ''
-    
+
     if (data.error) {
       return data.error
     }
@@ -434,9 +464,9 @@ function DecodeTab() {
     for (const [key, value] of Object.entries(data.parameters)) {
       if (isNestedCall(value) || isMultiSend(value)) {
         result += `  ${key}:\n`
-        result += await formatDecodedResult(value, 2)
+        result += await formatDecodedResult(value, 2, includeRawData)
       } else {
-        result += `  ${key}: ${await formatValue(value)}\n`
+        result += `  ${key}: ${await formatValue(value, includeRawData)}\n`
       }
     }
     return result
@@ -445,9 +475,9 @@ function DecodeTab() {
   const CopyButton = () => (
     <button
       onClick={async () => {
-        const content = showAsJson 
+        const content = showAsJson
           ? JSON.stringify(decodedData, null, 2)
-          : await formatJsonAsText(decodedData)
+          : await formatJsonAsText(decodedData, showRawData)
         navigator.clipboard.writeText(content)
         setCopiedResult(true)
         setTimeout(() => setCopiedResult(false), 2000)
@@ -474,13 +504,13 @@ function DecodeTab() {
         if (showAsJson) {
           setDisplayContent(JSON.stringify(decodedData, null, 2))
         } else {
-          const textContent = await formatJsonAsText(decodedData)
+          const textContent = await formatJsonAsText(decodedData, showRawData)
           setDisplayContent(textContent)
         }
       }
 
       updateContent()
-    }, [decodedData, showAsJson])
+    }, [decodedData, showAsJson, showRawData])
 
     return (
       <textarea
@@ -634,6 +664,16 @@ function DecodeTab() {
             className="mr-2 cursor-pointer"
           />
           <span className="text-sm">Decode multi-send transactions</span>
+        </label>
+
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={showRawData}
+            onChange={(e) => setShowRawData(e.target.checked)}
+            className="mr-2 cursor-pointer"
+          />
+          <span className="text-sm">Show raw data in decoded results</span>
         </label>
       </div>
 
