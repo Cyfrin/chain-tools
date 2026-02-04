@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { AbiCoder, FunctionFragment, Interface, keccak256, toUtf8Bytes, getAddress } from 'ethers'
+import AIShareButtons from '@/components/AIShareButtons'
 
 // Client-side cache for signature lookups
 const signatureCache = new Map<string, {
@@ -60,21 +61,21 @@ function AbiToolsPageContent() {
         <h1 className="text-3xl font-bold mb-8">ABI Encoding</h1>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-gray-200 dark:border-gray-600 mb-6">
+        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-6">
           <button
             onClick={() => setActiveTab('decode')}
-            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'decode'
-              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-all duration-200 cursor-pointer ${activeTab === 'decode'
+              ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               }`}
           >
             Decode
           </button>
           <button
             onClick={() => setActiveTab('encode')}
-            className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors cursor-pointer ${activeTab === 'encode'
-              ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+            className={`px-6 py-3 text-sm font-medium border-b-2 transition-all duration-200 cursor-pointer ${activeTab === 'encode'
+              ? 'border-blue-500 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+              : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
               }`}
           >
             Encode
@@ -122,6 +123,7 @@ function DecodeTab() {
   const [loading, setLoading] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
   const [copiedResult, setCopiedResult] = useState(false)
+  const [displayContent, setDisplayContent] = useState('')
   const searchParams = useSearchParams()
 
   // Load URL parameters on component mount
@@ -388,9 +390,9 @@ function DecodeTab() {
 
     if (isNestedCall(data)) {
       // Format nested function call
-      let result = `${spaces}📞 Function: ${data.function}\n`
-      result += `${spaces}🔍 Selector: ${data.selector}\n`
-      result += `${spaces}📋 Parameters:\n`
+      let result = `${spaces}Function: ${data.function}\n`
+      result += `${spaces}Selector: ${data.selector}\n`
+      result += `${spaces}Parameters:\n`
 
       for (const [key, value] of Object.entries(data.parameters)) {
         if (isNestedCall(value) || isMultiSend(value)) {
@@ -402,12 +404,12 @@ function DecodeTab() {
       }
 
       if (includeRawData) {
-        result += `${spaces}🔤 Raw Data: ${data.raw}\n`
+        result += `${spaces}Raw Data: ${data.raw}\n`
       }
       return result
     } else if (isMultiSend(data)) {
       // Format multi-send transactions
-      let result = `${spaces}📦 Multi-Send (${data.transactions.length} transactions):\n`
+      let result = `${spaces}Multi-Send (${data.transactions.length} transactions):\n`
 
       for (let i = 0; i < data.transactions.length; i++) {
         const tx = data.transactions[i]
@@ -460,7 +462,7 @@ function DecodeTab() {
     }
 
     // Format the result nicely
-    let result = `📞 Function: ${data.function}\n📋 Parameters:\n`
+    let result = `Function: ${data.function}\nParameters:\n`
     for (const [key, value] of Object.entries(data.parameters)) {
       if (isNestedCall(value) || isMultiSend(value)) {
         result += `  ${key}:\n`
@@ -482,45 +484,33 @@ function DecodeTab() {
         setCopiedResult(true)
         setTimeout(() => setCopiedResult(false), 2000)
       }}
-      className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-16 whitespace-nowrap ${copiedResult
-        ? 'bg-green-700'
-        : 'bg-green-600 hover:bg-green-700'
+      className={`px-3 py-1.5 text-xs text-white rounded-lg transition-colors cursor-pointer ${copiedResult
+        ? 'bg-blue-700'
+        : 'bg-blue-600 hover:bg-blue-700'
         }`}
     >
       {copiedResult ? 'Copied!' : 'Copy'}
     </button>
   )
 
-  const DisplayArea = () => {
-    const [displayContent, setDisplayContent] = useState('')
-
-    useEffect(() => {
-      const updateContent = async () => {
-        if (!decodedData) {
-          setDisplayContent('')
-          return
-        }
-
-        if (showAsJson) {
-          setDisplayContent(JSON.stringify(decodedData, null, 2))
-        } else {
-          const textContent = await formatJsonAsText(decodedData, showRawData)
-          setDisplayContent(textContent)
-        }
+  // Update display content when decodedData changes
+  useEffect(() => {
+    const updateContent = async () => {
+      if (!decodedData) {
+        setDisplayContent('')
+        return
       }
 
-      updateContent()
-    }, [decodedData, showAsJson, showRawData])
+      if (showAsJson) {
+        setDisplayContent(JSON.stringify(decodedData, null, 2))
+      } else {
+        const textContent = await formatJsonAsText(decodedData, showRawData)
+        setDisplayContent(textContent)
+      }
+    }
 
-    return (
-      <textarea
-        id="results"
-        value={displayContent}
-        readOnly
-        className="w-full h-48 p-3 border border-gray-300 rounded-lg dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-mono text-sm"
-      />
-    )
-  }
+    updateContent()
+  }, [decodedData, showAsJson, showRawData])
 
   const decodeData = async () => {
     if (!abiData || !signature) {
@@ -605,7 +595,7 @@ function DecodeTab() {
   return (
     <div className="space-y-6">
       {/* Info Banner */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-xl">
         <p className="text-sm text-blue-800 dark:text-blue-200">
           <strong>ABI Decoder:</strong> Decode ABI-encoded data from smart contract function calls.
           The tool can automatically detect function signatures using the 4byte directory and recursively decode nested bytes parameters.
@@ -622,24 +612,24 @@ function DecodeTab() {
           value={abiData}
           onChange={(e) => handleAbiDataChange(e.target.value)}
           placeholder="0x095ea7b3000000000000000000000000..."
-          className="w-full h-32 p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+          className="w-full h-32 p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm transition-colors"
         />
         <p className="text-xs text-gray-500 mt-1">Raw ABI-encoded data (with or without 0x prefix)</p>
       </div>
 
       {/* Options */}
-      <div className="space-y-3">
-        <label className="flex items-center">
+      <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl space-y-3">
+        <label className="flex items-center cursor-pointer">
           <input
             type="checkbox"
             checked={isFunction}
             onChange={(e) => setIsFunction(e.target.checked)}
-            className="mr-2 cursor-pointer"
+            className="mr-3 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
           />
           <span className="text-sm">Data includes function selector</span>
         </label>
 
-        <label className="flex items-center">
+        <label className="flex items-center cursor-pointer">
           <input
             type="checkbox"
             checked={autoDetect}
@@ -651,27 +641,27 @@ function DecodeTab() {
                 setSignature('') // Clear manual signature when enabling auto-detect
               }
             }}
-            className="mr-2 cursor-pointer"
+            className="mr-3 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
           />
           <span className="text-sm">Auto-lookup signature</span>
         </label>
 
-        <label className="flex items-center">
+        <label className="flex items-center cursor-pointer">
           <input
             type="checkbox"
             checked={decodeMultiSend}
             onChange={(e) => setDecodeMultiSend(e.target.checked)}
-            className="mr-2 cursor-pointer"
+            className="mr-3 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
           />
           <span className="text-sm">Decode multi-send transactions</span>
         </label>
 
-        <label className="flex items-center">
+        <label className="flex items-center cursor-pointer">
           <input
             type="checkbox"
             checked={showRawData}
             onChange={(e) => setShowRawData(e.target.checked)}
-            className="mr-2 cursor-pointer"
+            className="mr-3 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
           />
           <span className="text-sm">Show raw data in decoded results</span>
         </label>
@@ -680,7 +670,7 @@ function DecodeTab() {
       {/* Signature Input */}
       <div>
         <label htmlFor="signature" className="block text-sm font-medium mb-2">
-          Function Signature {loading && <span className="text-blue-500">(Loading...)</span>}
+          Function Signature {loading && <span className="text-blue-500 animate-pulse">(Loading...)</span>}
         </label>
         <input
           id="signature"
@@ -689,34 +679,34 @@ function DecodeTab() {
           onChange={(e) => setSignature(e.target.value)}
           placeholder="transfer(address,uint256)"
           disabled={autoDetect}
-          className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm disabled:bg-gray-100 dark:disabled:bg-gray-700"
+          className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
         />
         <p className="text-xs text-gray-500 mt-1">Function signature or full ABI JSON</p>
       </div>
 
       {/* Results */}
-      <div>
-        <div className="flex justify-between items-center mb-2">
+      <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-xl p-5">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
           <div className="flex items-center gap-4">
-            <label htmlFor="results" className="block text-sm font-medium">
+            <label htmlFor="results" className="text-sm font-semibold text-blue-900 dark:text-blue-100">
               Decoded Result
             </label>
             {decodedData && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-white dark:bg-gray-800 rounded-lg p-1 shadow-sm">
                 <button
                   onClick={() => setShowAsJson(false)}
-                  className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${!showAsJson
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                  className={`px-3 py-1 text-xs rounded-md transition-all cursor-pointer ${!showAsJson
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
                   Text
                 </button>
                 <button
                   onClick={() => setShowAsJson(true)}
-                  className={`px-3 py-1 text-xs rounded transition-colors cursor-pointer ${showAsJson
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                  className={`px-3 py-1 text-xs rounded-md transition-all cursor-pointer ${showAsJson
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
                   JSON
@@ -734,12 +724,12 @@ function DecodeTab() {
                   setCopiedShare(true)
                   setTimeout(() => setCopiedShare(false), 2000)
                 }}
-                className={`px-3 py-1 text-xs text-white rounded transition-colors cursor-pointer w-32 whitespace-nowrap ${copiedShare
+                className={`px-3 py-1.5 text-xs text-white rounded-lg transition-colors cursor-pointer ${copiedShare
                   ? 'bg-green-700'
                   : 'bg-green-600 hover:bg-green-700'
                   }`}
               >
-                {copiedShare ? 'Copied!' : 'Share Decoded Data'}
+                {copiedShare ? 'Copied!' : 'Share'}
               </button>
               <CopyButton />
               <button
@@ -755,11 +745,27 @@ function DecodeTab() {
             </div>
           )}
         </div>
-        <DisplayArea />
+        <textarea
+          id="results"
+          value={displayContent}
+          readOnly
+          className="w-full h-48 p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-white dark:bg-gray-800 font-mono text-sm"
+        />
+
+        {/* AI Share Buttons */}
+        {decodedData && !decodedData.error && (
+          <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Get AI help understanding this data:</p>
+            <AIShareButtons
+              data={displayContent}
+              context="ABI Decoder"
+            />
+          </div>
+        )}
       </div>
 
       {/* Example section */}
-      <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
+      <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
         <h3 className="text-lg font-semibold mb-4">Examples</h3>
         <div className="space-y-4 text-sm">
           <div>
@@ -772,7 +778,7 @@ function DecodeTab() {
                 setAutoDetect(true)
                 setDecodeMultiSend(true)
               }}
-              className="ml-2 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors cursor-pointer"
+              className="ml-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
             >
               Try Example
             </button>
@@ -791,7 +797,7 @@ function DecodeTab() {
                 setAutoDetect(true)
                 setDecodeMultiSend(true)
               }}
-              className="ml-2 px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors cursor-pointer"
+              className="ml-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
             >
               Try Example
             </button>
@@ -865,7 +871,7 @@ function EncodeTab() {
   return (
     <div className="space-y-6">
       {/* Info Banner */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-xl">
         <p className="text-sm text-blue-800 dark:text-blue-200">
           <strong>ABI Encoder:</strong> Encode function parameters into ABI format for smart contract interactions.
           Provide the function signature and parameters as a JSON array.
@@ -883,7 +889,7 @@ function EncodeTab() {
           value={signature}
           onChange={(e) => setSignature(e.target.value)}
           placeholder="transfer(address,uint256)"
-          className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+          className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm transition-colors"
         />
         <p className="text-xs text-gray-500 mt-1">Function signature (e.g., transfer(address,uint256))</p>
       </div>
@@ -898,35 +904,35 @@ function EncodeTab() {
           value={jsonData}
           onChange={(e) => setJsonData(e.target.value)}
           placeholder='["0x742d35Cc6634C0532925a3b8D9c99fE6e8d8A2A9", "1000000000000000000"]'
-          className="w-full h-32 p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+          className="w-full h-32 p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm transition-colors"
         />
         <p className="text-xs text-gray-500 mt-1">Parameters as JSON array matching the function signature</p>
       </div>
 
       {/* Results */}
-      <div>
-        <label htmlFor="encoded-result" className="block text-sm font-medium mb-2">
+      <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-xl p-5">
+        <label htmlFor="encoded-result" className="block text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
           Encoded Result
         </label>
         <textarea
           id="encoded-result"
           value={encodedResult}
           readOnly
-          className="w-full h-32 p-3 border border-gray-300 rounded-lg dark:border-gray-600 bg-gray-50 dark:bg-gray-800 font-mono text-sm"
+          className="w-full h-32 p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-white dark:bg-gray-800 font-mono text-sm"
         />
       </div>
 
       {/* Example section */}
-      <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
+      <div className="bg-gray-50 dark:bg-gray-800/50 p-6 rounded-xl border border-gray-200 dark:border-gray-700">
         <h3 className="text-lg font-semibold mb-4">Example</h3>
         <div className="space-y-2 text-sm">
           <div>
             <span className="font-medium">Function:</span>
-            <code className="ml-2 text-blue-600 dark:text-blue-400">transfer(address,uint256)</code>
+            <code className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded">transfer(address,uint256)</code>
           </div>
           <div>
             <span className="font-medium">Parameters:</span>
-            <code className="ml-2 text-blue-600 dark:text-blue-400">["0x742d35Cc6634C0532925a3b8D9c99fE6e8d8A2A9", "1000000000000000000"]</code>
+            <code className="ml-2 px-2 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 rounded text-xs">["0x742d35Cc6634C0532925a3b8D9c99fE6e8d8A2A9", "1000000000000000000"]</code>
           </div>
         </div>
       </div>

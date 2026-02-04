@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { ethers } from 'ethers';
 import { useSearchParams } from 'next/navigation'
+import AIShareButtons from '@/components/AIShareButtons';
 
 
 interface SafeHashResult {
@@ -84,7 +85,7 @@ const SAFE_VERSIONS = ['1.4.1', '1.3.0', '1.2.0', '1.1.1', '1.0.0'];
 
 export default function SafeHash() {
   return (
-    <Suspense fallback={<div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]"><div className="max-w-2xl mx-auto"><h1 className="text-3xl font-bold mb-8">ABI Encoding</h1><div className="text-center">Loading...</div></div></div>}>
+    <Suspense fallback={<div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]"><div className="max-w-2xl mx-auto"><h1 className="text-3xl font-bold mb-8">Safe Wallet Hash Calculator</h1><div className="text-center">Loading...</div></div></div>}>
       <SafeHashPageContent />
     </Suspense>
   )
@@ -128,7 +129,7 @@ function SafeHashPageContent() {
   // Ref for scrolling to results
   const resultsRef = useRef<HTMLDivElement>(null);
 
-  // 2️⃣ on mount (or whenever the URL changes), populate your form from ?-params
+  // on mount (or whenever the URL changes), populate your form from ?-params
   useEffect(() => {
     if (!searchParams) return;
 
@@ -181,7 +182,7 @@ function SafeHashPageContent() {
     }
   }, [searchParams]);
 
-  // 📋 Copy current form into a shareable URL
+  // Copy current form into a shareable URL
   const copyShareableUrl = () => {
     const url = new URL(window.location.href);
     url.search = ''; // clear any old params
@@ -507,6 +508,41 @@ function SafeHashPageContent() {
     setSafeVersion('1.4.1');
   };
 
+  const getResultsData = () => {
+    if (!result) return '';
+
+    let data = `Safe Wallet Hash Calculator Results:
+
+Safe Address: ${safeAddress}
+Chain: ${chainId} (Chain ID: ${CHAIN_IDS[chainId]})
+Safe Version: ${safeVersion}
+
+Transaction Details:
+- To: ${transaction.to}
+- Value: ${transaction.value} wei
+- Data: ${transaction.data}
+- Operation: ${transaction.operation === 0 ? 'Call' : 'DelegateCall'}
+- Nonce: ${transaction.nonce}
+
+Calculated Hashes:
+- Domain Hash: ${result.domainHash}
+- Message Hash: ${result.messageHash}
+- Safe Transaction Hash: ${result.safeTransactionHash}`;
+
+    if (nestedResult) {
+      data += `
+
+Nested Safe Results:
+- Nested Safe Address: ${nestedSafeAddress}
+- Nested Safe Nonce: ${nestedSafeNonce}
+- Nested Domain Hash: ${nestedResult.nestedDomainHash}
+- Nested Message Hash: ${nestedResult.nestedMessageHash}
+- Nested Safe Transaction Hash: ${nestedResult.nestedSafeTransactionHash}`;
+    }
+
+    return data;
+  };
+
   return (
     <div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
       <div className="max-w-6xl mx-auto">
@@ -514,7 +550,7 @@ function SafeHashPageContent() {
         <h1 className="text-3xl font-bold mb-8">Safe Wallet Hash Calculator</h1>
 
         <div className="space-y-6">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-xl">
             <p className="text-sm text-blue-800 dark:text-blue-200">
               <strong>Note:</strong> Calculate domain hash, message hash, and Safe transaction hash for Safe wallet transactions.
               Verify these values when signing with your hardware wallet.
@@ -525,20 +561,16 @@ function SafeHashPageContent() {
             <div className="lg:col-span-2">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="text-lg font-semibold">Transaction Details</h3>
-                <div className="justify-end">
+                <div className="flex gap-2">
                   <button
                     onClick={copyShareableUrl}
-                    className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 
-               dark:text-blue-400 dark:hover:text-blue-200 
-               font-medium rounded cursor-pointer transition"
+                    className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer transition-colors"
                   >
                     {copiedUrl ? 'Copied!' : 'Copy Shareable URL'}
                   </button>
                   <button
                     onClick={loadExample}
-                    className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 
-               dark:text-blue-400 dark:hover:text-blue-200 
-               font-medium rounded cursor-pointer transition"
+                    className="px-4 py-2 text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200 font-medium rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/30 cursor-pointer transition-colors"
                   >
                     Load Example
                   </button>
@@ -556,7 +588,7 @@ function SafeHashPageContent() {
                       value={safeAddress}
                       onChange={(e) => setSafeAddress(e.target.value)}
                       placeholder="0x..."
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+                      className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm transition-colors"
                     />
                   </div>
 
@@ -567,7 +599,7 @@ function SafeHashPageContent() {
                     <select
                       value={chainId}
                       onChange={(e) => setChainId(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                      className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 cursor-pointer transition-colors"
                     >
                       {Object.keys(CHAIN_IDS).map(chain => (
                         <option key={chain} value={chain}>
@@ -584,7 +616,7 @@ function SafeHashPageContent() {
                     <select
                       value={safeVersion}
                       onChange={(e) => setSafeVersion(e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                      className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 cursor-pointer transition-colors"
                     >
                       {SAFE_VERSIONS.map(version => (
                         <option key={version} value={version}>
@@ -602,26 +634,26 @@ function SafeHashPageContent() {
                       type="number"
                       value={transaction.nonce}
                       onChange={(e) => handleTransactionChange('nonce', e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                      className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
                     />
                   </div>
                 </div>
 
                 {/* Safe API Section */}
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="text-md font-semibold">Transaction Data from Safe API</h4>
                     <button
                       onClick={fetchSafeTransactionData}
                       disabled={apiLoading || !safeAddress || !transaction.nonce}
-                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:cursor-not-allowed cursor-pointer"
+                      className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:cursor-not-allowed cursor-pointer"
                     >
                       {apiLoading ? 'Fetching...' : 'Fetch from API'}
                     </button>
                   </div>
 
                   {apiError && (
-                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 mb-4">
                       <p className="text-red-800 dark:text-red-200 text-sm">{apiError}</p>
                     </div>
                   )}
@@ -636,7 +668,7 @@ function SafeHashPageContent() {
                         value={transaction.to}
                         onChange={(e) => handleTransactionChange('to', e.target.value)}
                         placeholder="0x... (will be filled by API or enter manually)"
-                        className={`w-full p-3 border rounded-lg dark:bg-gray-800 font-mono text-sm ${apiFieldsError.to
+                        className={`w-full p-3 border rounded-xl dark:bg-gray-800 font-mono text-sm transition-colors ${apiFieldsError.to
                           ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
                           : 'border-gray-300 dark:border-gray-600'
                           }`}
@@ -655,9 +687,9 @@ function SafeHashPageContent() {
                               url.searchParams.set('data', transaction.data)
                               window.open(url.toString(), '_blank')
                             }}
-                            className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors cursor-pointer"
+                            className="px-3 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
                           >
-                            Decode Data ↗
+                            Decode Data
                           </button>
                         )}
                       </div>
@@ -666,7 +698,7 @@ function SafeHashPageContent() {
                         onChange={(e) => handleTransactionChange('data', e.target.value)}
                         placeholder="0x... (will be filled by API or enter manually)"
                         rows={3}
-                        className={`w-full p-3 border rounded-lg dark:bg-gray-800 font-mono text-sm ${apiFieldsError.data
+                        className={`w-full p-3 border rounded-xl dark:bg-gray-800 font-mono text-sm transition-colors ${apiFieldsError.data
                           ? 'border-red-300 dark:border-red-600 bg-red-50 dark:bg-red-900/20'
                           : 'border-gray-300 dark:border-gray-600'
                           }`}
@@ -674,7 +706,7 @@ function SafeHashPageContent() {
                     </div>
                   </div>
 
-                  <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+                  <div className="mt-4 text-sm text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg">
                     <p>• If fields are empty, click "Fetch from API" to auto-fill transaction data</p>
                     <p>• If API fails, fields will be highlighted in red for manual entry</p>
                     <p>• Requires valid Safe address and nonce</p>
@@ -690,7 +722,7 @@ function SafeHashPageContent() {
                       type="text"
                       value={transaction.value}
                       onChange={(e) => handleTransactionChange('value', e.target.value)}
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                      className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
                     />
                   </div>
 
@@ -701,7 +733,7 @@ function SafeHashPageContent() {
                     <select
                       value={transaction.operation}
                       onChange={(e) => handleTransactionChange('operation', parseInt(e.target.value))}
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                      className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 cursor-pointer transition-colors"
                     >
                       <option value={0}>Call (0)</option>
                       <option value={1}>DelegateCall (1)</option>
@@ -721,7 +753,7 @@ function SafeHashPageContent() {
                         type="text"
                         value={transaction.safeTxGas}
                         onChange={(e) => handleTransactionChange('safeTxGas', e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                        className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
                       />
                     </div>
 
@@ -733,7 +765,7 @@ function SafeHashPageContent() {
                         type="text"
                         value={transaction.baseGas}
                         onChange={(e) => handleTransactionChange('baseGas', e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                        className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
                       />
                     </div>
 
@@ -745,7 +777,7 @@ function SafeHashPageContent() {
                         type="text"
                         value={transaction.gasPrice}
                         onChange={(e) => handleTransactionChange('gasPrice', e.target.value)}
-                        className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                        className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
                       />
                     </div>
 
@@ -758,12 +790,12 @@ function SafeHashPageContent() {
                         value={transaction.gasToken}
                         onChange={(e) => handleTransactionChange('gasToken', e.target.value)}
                         placeholder="0x0000000000000000000000000000000000000000"
-                        className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+                        className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm transition-colors"
                       />
                     </div>
                   </div>
 
-                  <div>
+                  <div className="mt-4">
                     <label className="block text-sm font-medium mb-2">
                       Refund Receiver
                     </label>
@@ -772,7 +804,7 @@ function SafeHashPageContent() {
                       value={transaction.refundReceiver}
                       onChange={(e) => handleTransactionChange('refundReceiver', e.target.value)}
                       placeholder="0x0000000000000000000000000000000000000000"
-                      className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+                      className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm transition-colors"
                     />
                   </div>
                 </div>
@@ -785,7 +817,7 @@ function SafeHashPageContent() {
                       id="nested-safe"
                       checked={isNestedSafe}
                       onChange={(e) => setIsNestedSafe(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                     />
                     <label htmlFor="nested-safe" className="text-sm font-medium cursor-pointer">
                       Nested Safe?
@@ -793,9 +825,9 @@ function SafeHashPageContent() {
                   </div>
 
                   {isNestedSafe && (
-                    <div className="space-y-4 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-                      <div className="text-sm text-blue-800 dark:text-blue-200 mb-4">
-                        <p><strong>Note:</strong> Nested safe functionality calculates a wrapper transaction that calls <code>approveHash()</code> on the outer safe.</p>
+                    <div className="space-y-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-4 rounded-xl">
+                      <div className="text-sm text-purple-800 dark:text-purple-200 mb-4">
+                        <p><strong>Note:</strong> Nested safe functionality calculates a wrapper transaction that calls <code className="bg-purple-100 dark:bg-purple-800/50 px-1 rounded">approveHash()</code> on the outer safe.</p>
                       </div>
 
                       <div className="grid md:grid-cols-2 gap-4">
@@ -808,7 +840,7 @@ function SafeHashPageContent() {
                             value={nestedSafeAddress}
                             onChange={(e) => setNestedSafeAddress(e.target.value)}
                             placeholder="0x..."
-                            className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono text-sm"
+                            className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm transition-colors"
                           />
                         </div>
 
@@ -820,7 +852,7 @@ function SafeHashPageContent() {
                             type="number"
                             value={nestedSafeNonce}
                             onChange={(e) => setNestedSafeNonce(e.target.value)}
-                            className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                            className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
                           />
                         </div>
                       </div>
@@ -831,7 +863,7 @@ function SafeHashPageContent() {
                 <button
                   onClick={handleCalculate}
                   disabled={loading || !safeAddress || !transaction.to}
-                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:cursor-not-allowed cursor-pointer"
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-xl font-medium transition-colors disabled:cursor-not-allowed cursor-pointer"
                 >
                   {loading ? 'Calculating...' : 'Calculate Safe Hash'}
                 </button>
@@ -842,28 +874,28 @@ function SafeHashPageContent() {
               <h3 className="text-lg font-semibold mb-4">Results</h3>
 
               {error && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 mb-4">
                   <p className="text-red-800 dark:text-red-200 text-sm">{error}</p>
                 </div>
               )}
 
               {result && (
                 <div className="space-y-4">
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                    <h4 className="font-medium mb-2">Domain Hash</h4>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                    <h4 className="font-medium mb-2 text-sm text-gray-600 dark:text-gray-400">Domain Hash</h4>
                     <p className="font-mono text-xs break-all">
                       {result.domainHash}
                     </p>
                   </div>
 
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                    <h4 className="font-medium mb-2">Message Hash</h4>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                    <h4 className="font-medium mb-2 text-sm text-gray-600 dark:text-gray-400">Message Hash</h4>
                     <p className="font-mono text-xs break-all">
                       {result.messageHash}
                     </p>
                   </div>
 
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
                     <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Safe Transaction Hash</h4>
                     <p className="font-mono text-xs text-blue-800 dark:text-blue-200 break-all">
                       {result.safeTransactionHash}
@@ -871,6 +903,15 @@ function SafeHashPageContent() {
                     <p className="text-xs text-blue-600 dark:text-blue-300 mt-2">
                       This is the hash you should verify when signing
                     </p>
+                  </div>
+
+                  {/* AI Share Buttons for main results */}
+                  <div className="pt-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Get AI help verifying this hash:</p>
+                    <AIShareButtons
+                      data={getResultsData()}
+                      context="Safe Wallet Hash Calculator"
+                    />
                   </div>
                 </div>
               )}
@@ -881,21 +922,21 @@ function SafeHashPageContent() {
                     Nested Safe Transaction Results
                   </h4>
 
-                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-                    <h5 className="font-medium mb-2">Nested Domain Hash</h5>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
+                    <h5 className="font-medium mb-2 text-sm text-purple-600 dark:text-purple-400">Nested Domain Hash</h5>
                     <p className="font-mono text-xs break-all">
                       {nestedResult.nestedDomainHash}
                     </p>
                   </div>
 
-                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-                    <h5 className="font-medium mb-2">Nested Message Hash</h5>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4">
+                    <h5 className="font-medium mb-2 text-sm text-purple-600 dark:text-purple-400">Nested Message Hash</h5>
                     <p className="font-mono text-xs break-all">
                       {nestedResult.nestedMessageHash}
                     </p>
                   </div>
 
-                  <div className="bg-purple-100 dark:bg-purple-900/30 border border-purple-300 dark:border-purple-700 rounded-lg p-4">
+                  <div className="bg-gradient-to-br from-purple-100 to-purple-50 dark:from-purple-900/30 dark:to-purple-900/10 border border-purple-300 dark:border-purple-700 rounded-xl p-4">
                     <h5 className="font-medium text-purple-800 dark:text-purple-200 mb-2">Nested Safe Transaction Hash</h5>
                     <p className="font-mono text-xs text-purple-800 dark:text-purple-200 break-all">
                       {nestedResult.nestedSafeTransactionHash}
@@ -905,8 +946,8 @@ function SafeHashPageContent() {
                     </p>
                   </div>
 
-                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
-                    <h5 className="font-medium mb-2">Nested Transaction Details</h5>
+                  <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                    <h5 className="font-medium mb-2 text-sm">Nested Transaction Details</h5>
                     <div className="text-xs space-y-1">
                       <p><span className="font-medium">To:</span> <span className="font-mono break-all">{safeAddress}</span> (inner safe)</p>
                       <p><span className="font-medium">Data:</span> <span className="font-mono text-xs break-all">0xd4d9bdcd{result?.safeTransactionHash.slice(2)}</span></p>
@@ -917,7 +958,10 @@ function SafeHashPageContent() {
               )}
 
               {!result && !error && (
-                <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                <div className="text-center text-gray-500 dark:text-gray-400 py-8 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
+                  <svg className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
                   <p className="text-sm">Fill in the transaction details and click "Calculate Safe Hash" to see results</p>
                 </div>
               )}

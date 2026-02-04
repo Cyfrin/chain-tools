@@ -1,11 +1,15 @@
+import packageJson from '../../package.json';
+
 export default function Footer() {
   return (
     <footer className="w-full border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-black mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          {/* Left: Copyright */}
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            © 2025 Cyfrin Inc.
+          {/* Left: Copyright and Version */}
+          <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400">
+            <span>© 2025 Cyfrin Inc.</span>
+            <span className="text-gray-300 dark:text-gray-600">•</span>
+            <span className="text-gray-500 dark:text-gray-500">v{packageJson.version}</span>
           </div>
 
           {/* Right: Links */}

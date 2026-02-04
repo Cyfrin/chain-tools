@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { CHAIN_CONFIG, GAS_PRESETS } from '@/config/chains';
+import AIShareButtons from '@/components/AIShareButtons';
 
 export default function GasEstimator() {
   const [ethPrice, setEthPrice] = useState<string>('');
@@ -35,7 +36,7 @@ export default function GasEstimator() {
         // Check cache for ETH price
         const ethCacheKey = 'eth-price-cache';
         const ethCached = localStorage.getItem(ethCacheKey);
-        
+
         if (ethCached) {
           const { price, timestamp } = JSON.parse(ethCached);
           if (Date.now() - timestamp < oneMinute) {
@@ -60,11 +61,11 @@ export default function GasEstimator() {
             timestamp: Date.now()
           }));
         }
-        
+
         // Check cache for gas price (per chain)
         const gasCacheKey = `gas-price-cache-${selectedChain}`;
         const gasCached = localStorage.getItem(gasCacheKey);
-        
+
         if (gasCached) {
           const { gasPrice, timestamp } = JSON.parse(gasCached);
           if (Date.now() - timestamp < oneMinute) {
@@ -89,7 +90,7 @@ export default function GasEstimator() {
             timestamp: Date.now()
           }));
         }
-        
+
         setLoading(false);
       } catch (error) {
         console.error('Error fetching data:', error);
@@ -109,10 +110,30 @@ export default function GasEstimator() {
     }
   };
 
+  const getResultsData = () => {
+    const chainName = CHAIN_CONFIG[selectedChain as keyof typeof CHAIN_CONFIG]?.name || selectedChain;
+    const presetName = gasPreset === 'custom' ? 'Custom' :
+      gasPreset === 'transfer' ? 'Transfer ETH' :
+      gasPreset === 'swap' ? 'Swap on Uniswap' :
+      gasPreset === 'erc20_deploy' ? 'Deploy ERC20' : gasPreset;
+
+    return `Chain: ${chainName}
+ETH Price: $${ethPrice}
+Gas Price: ${gasPrice} Gwei
+Gas Amount: ${gasAmount} (${presetName})
+
+Estimated Cost:
+- Cost in ETH: ${totalCostETH} ETH
+- Cost in USD: $${totalCostUSD}`;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading current prices...</div>
+        <div className="text-lg flex items-center gap-3">
+          <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+          Loading current prices...
+        </div>
       </div>
     );
   }
@@ -131,7 +152,7 @@ export default function GasEstimator() {
               type="number"
               value={ethPrice}
               onChange={(e) => setEthPrice(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+              className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
               placeholder="Current ETH price in USD"
             />
           </div>
@@ -140,15 +161,15 @@ export default function GasEstimator() {
             <label className="block text-sm font-medium mb-2 flex items-center gap-2">
               Chain (Optional)
               <div className="relative group">
-                <svg 
-                  className="w-4 h-4 text-gray-400 cursor-help" 
-                  fill="none" 
-                  stroke="currentColor" 
+                <svg
+                  className="w-4 h-4 text-gray-400 cursor-help"
+                  fill="none"
+                  stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded py-2 px-3 whitespace-nowrap z-20">
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded-lg py-2 px-3 whitespace-nowrap z-20 shadow-lg">
                   Chain selection fetches current gas price. Manual gas price input will override this.
                   <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
                 </div>
@@ -157,7 +178,7 @@ export default function GasEstimator() {
             <div className="relative">
               <button
                 onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 flex items-center justify-between bg-white dark:bg-gray-800"
+                className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 flex items-center justify-between bg-white dark:bg-gray-800 cursor-pointer transition-colors hover:border-gray-400 dark:hover:border-gray-500"
               >
                 <div className="flex items-center gap-3">
                   <Image
@@ -169,13 +190,13 @@ export default function GasEstimator() {
                   />
                   <span>{CHAIN_CONFIG[selectedChain as keyof typeof CHAIN_CONFIG].name}</span>
                 </div>
-                <svg className={`w-4 h-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`w-4 h-4 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
               {dropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-10">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-xl shadow-lg z-10 overflow-hidden">
                   {Object.entries(CHAIN_CONFIG).map(([key, config]) => (
                     <button
                       key={key}
@@ -183,7 +204,7 @@ export default function GasEstimator() {
                         setSelectedChain(key);
                         setDropdownOpen(false);
                       }}
-                      className="w-full p-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg"
+                      className="w-full p-3 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                     >
                       <Image
                         src={config.logo}
@@ -208,7 +229,7 @@ export default function GasEstimator() {
               type="number"
               value={gasPrice}
               onChange={(e) => setGasPrice(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+              className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
               placeholder="Gas price in Gwei"
             />
           </div>
@@ -219,7 +240,7 @@ export default function GasEstimator() {
               <select
                 value={gasPreset}
                 onChange={(e) => handleGasPresetChange(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 cursor-pointer transition-colors"
               >
                 <option value="custom">Custom</option>
                 <option value="transfer">Transfer ETH (~{GAS_PRESETS.transfer.toLocaleString()})</option>
@@ -230,31 +251,43 @@ export default function GasEstimator() {
                 type="number"
                 value={gasAmount}
                 onChange={(e) => setGasAmount(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800"
+                className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 transition-colors"
                 placeholder="Gas amount"
               />
             </div>
           </div>
 
-          <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold mb-4">Estimated Cost</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>Cost in ETH:</span>
-                <span className="font-mono">{totalCostETH} ETH</span>
+          {/* Results Card */}
+          <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 border border-blue-200 dark:border-blue-800 p-6 rounded-xl shadow-sm">
+            <h3 className="text-lg font-semibold mb-4 text-blue-900 dark:text-blue-100">Estimated Cost</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-blue-100 dark:border-blue-800">
+                <span className="text-gray-600 dark:text-gray-400">Cost in ETH:</span>
+                <span className="font-mono text-lg font-medium">{totalCostETH} ETH</span>
               </div>
-              <div className="flex justify-between">
-                <span>Cost in USD:</span>
-                <span className="font-mono">${totalCostUSD}</span>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-gray-600 dark:text-gray-400">Cost in USD:</span>
+                <span className="font-mono text-lg font-medium text-blue-600 dark:text-blue-400">${totalCostUSD}</span>
               </div>
             </div>
+
+            {/* AI Share Buttons */}
+            {ethPrice && gasPrice && gasAmount && parseFloat(totalCostUSD) > 0 && (
+              <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Get AI help understanding this estimate:</p>
+                <AIShareButtons
+                  data={getResultsData()}
+                  context="Gas Estimator"
+                />
+              </div>
+            )}
           </div>
 
           <div className="text-center text-xs text-gray-500 dark:text-gray-400">
             Powered by{' '}
-            <a 
-              href="https://www.coingecko.com/" 
-              target="_blank" 
+            <a
+              href="https://www.coingecko.com/"
+              target="_blank"
               rel="noopener noreferrer"
               className="text-blue-600 dark:text-blue-400 hover:underline"
             >

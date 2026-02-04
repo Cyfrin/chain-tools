@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import AIShareButtons from '@/components/AIShareButtons';
 
 export default function WeiConverter() {
   const [wei, setWei] = useState<string>('');
@@ -91,6 +92,20 @@ export default function WeiConverter() {
     setLastChanged(null);
   };
 
+  const hasValues = wei || gwei || eth;
+
+  const getResultsData = () => {
+    return `Wei Conversion Results:
+- Wei: ${wei || '0'}
+- Gwei: ${gwei || '0'}
+- ETH: ${eth || '0'}
+
+Conversion rates:
+- 1 ETH = 1,000,000,000 Gwei
+- 1 ETH = 1,000,000,000,000,000,000 Wei
+- 1 Gwei = 1,000,000,000 Wei`;
+  };
+
   return (
     <div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
       <div className="max-w-2xl mx-auto">
@@ -98,59 +113,94 @@ export default function WeiConverter() {
         <h1 className="text-3xl font-bold mb-8">Wei Converter</h1>
 
         <div className="space-y-6">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-xl">
             <p className="text-sm text-blue-800 dark:text-blue-200">
               <strong>Conversion rates:</strong><br />
               1 ETH = 1,000,000,000 Gwei = 1,000,000,000,000,000,000 Wei
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Wei</label>
-            <input
-              type="text"
-              value={wei}
-              onChange={(e) => handleWeiChange(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono"
-              placeholder="Enter amount in Wei"
-            />
-            <p className="text-xs text-gray-500 mt-1">Smallest unit of Ether</p>
-          </div>
+          <div className="space-y-4">
+            <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 p-4 rounded-xl">
+              <label className="block text-sm font-medium mb-2">Wei</label>
+              <input
+                type="text"
+                value={wei}
+                onChange={(e) => handleWeiChange(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono transition-colors"
+                placeholder="Enter amount in Wei"
+              />
+              <p className="text-xs text-gray-500 mt-2">Smallest unit of Ether</p>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Gwei</label>
-            <input
-              type="text"
-              value={gwei}
-              onChange={(e) => handleGweiChange(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono"
-              placeholder="Enter amount in Gwei"
-            />
-            <p className="text-xs text-gray-500 mt-1">Commonly used for gas prices (1 Gwei = 1,000,000,000 Wei)</p>
-          </div>
+            <div className="flex justify-center">
+              <div className="flex flex-col items-center gap-1 text-gray-400">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+                <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </div>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">ETH</label>
-            <input
-              type="text"
-              value={eth}
-              onChange={(e) => handleEthChange(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded-lg dark:border-gray-600 dark:bg-gray-800 font-mono"
-              placeholder="Enter amount in ETH"
-            />
-            <p className="text-xs text-gray-500 mt-1">Standard Ether unit</p>
+            <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 p-4 rounded-xl">
+              <label className="block text-sm font-medium mb-2">Gwei</label>
+              <input
+                type="text"
+                value={gwei}
+                onChange={(e) => handleGweiChange(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono transition-colors"
+                placeholder="Enter amount in Gwei"
+              />
+              <p className="text-xs text-gray-500 mt-2">Commonly used for gas prices (1 Gwei = 1,000,000,000 Wei)</p>
+            </div>
+
+            <div className="flex justify-center">
+              <div className="flex flex-col items-center gap-1 text-gray-400">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+                <svg className="w-4 h-4 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                </svg>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 p-4 rounded-xl">
+              <label className="block text-sm font-medium mb-2">ETH</label>
+              <input
+                type="text"
+                value={eth}
+                onChange={(e) => handleEthChange(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono transition-colors"
+                placeholder="Enter amount in ETH"
+              />
+              <p className="text-xs text-gray-500 mt-2">Standard Ether unit</p>
+            </div>
           </div>
 
           <div className="flex justify-center">
             <button
               onClick={clearAll}
-              className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition-colors"
+              className="px-6 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-xl transition-colors cursor-pointer font-medium"
             >
               Clear All
             </button>
           </div>
 
-          <div className="bg-gray-50 dark:bg-gray-800 p-6 rounded-lg">
+          {/* AI Share Buttons */}
+          {hasValues && (
+            <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 border border-blue-200 dark:border-blue-800 p-4 rounded-xl">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Get AI help understanding these conversions:</p>
+              <AIShareButtons
+                data={getResultsData()}
+                context="Wei Converter"
+              />
+            </div>
+          )}
+
+          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 p-6 rounded-xl">
             <h3 className="text-lg font-semibold mb-4">Quick Reference</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
