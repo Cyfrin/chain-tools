@@ -196,6 +196,15 @@ export default function About() {
               <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-2 group-hover:text-blue-700 dark:group-hover:text-blue-300">Cyfrin Updraft</h4>
               <p className="text-sm text-gray-600 dark:text-gray-400">The #1 place to learn Solidity, smart contract security, Vyper, and all things technical in web3</p>
             </a>
+            <a
+              href="https://tx-graph-eight.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group block p-4 bg-white dark:bg-gray-800 rounded-xl hover:shadow-lg transition-all duration-200 border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 hover:-translate-y-0.5"
+            >
+              <h4 className="font-semibold text-blue-600 dark:text-blue-400 mb-2 group-hover:text-blue-700 dark:group-hover:text-blue-300">Cyfrin Updraft</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Transaction visualizer. Supports Foundry tests.</p>
+            </a>
           </div>
         </div>
 
