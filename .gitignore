@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 safe-hash-rs/
+
+# Other
+wise-signer-snap/
+zksync-upgrade-verification/
