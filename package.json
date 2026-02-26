@@ -1,6 +1,6 @@
 {
   "name": "chain-tools",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "license": "AGPL-3.0",
   "scripts": {
@@ -23,6 +23,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }

@@ -1,4 +1,4 @@
-import { AbiCoder, Interface } from 'ethers'
+import { AbiCoder } from 'ethers'
 
 export const UNISWAP_ROUTER_COMMANDS: Record<string, { name: string; params: { name: string; type: string; description: string }[] }> = {
   '0': {
@@ -8,7 +8,7 @@ export const UNISWAP_ROUTER_COMMANDS: Record<string, { name: string; params: { n
       { type: 'uint256', description: 'The amount of input tokens for the trade', name: 'amountIn' },
       { type: 'uint256', description: 'The minimum amount of output tokens the user wants', name: 'amountOutMin' },
       { type: 'bytes', description: 'The UniswapV3 encoded path to trade along', name: 'path' },
-      { type: 'bool', description: 'A flag for whether the input tokens should come from the msg.sender', name: 'payerIsUser' },
+      { type: 'bool', description: 'Whether the input tokens come from msg.sender (through Permit2) or are already in the router', name: 'payerIsUser' },
     ],
   },
   '1': {
@@ -18,7 +18,7 @@ export const UNISWAP_ROUTER_COMMANDS: Record<string, { name: string; params: { n
       { type: 'uint256', description: 'The amount of output tokens to receive', name: 'amountOut' },
       { type: 'uint256', description: 'The maximum number of input tokens that should be spent', name: 'amountInMax' },
       { type: 'bytes', description: 'The UniswapV3 encoded path to trade along', name: 'path' },
-      { type: 'bool', description: 'A flag for whether the input tokens should come from the msg.sender', name: 'payerIsUser' },
+      { type: 'bool', description: 'Whether the input tokens come from msg.sender (through Permit2) or are already in the router', name: 'payerIsUser' },
     ],
   },
   '2': {
@@ -57,7 +57,7 @@ export const UNISWAP_ROUTER_COMMANDS: Record<string, { name: string; params: { n
     params: [
       { type: 'address', description: 'The ERC20 token to transfer (or Constants.ETH for ETH)', name: 'token' },
       { type: 'address', description: 'The recipient of the transfer', name: 'recipient' },
-      { type: 'uint256', description: 'In basis points, the percentage of the contract balance to transfer', name: 'bips' },
+      { type: 'uint256', description: "In basis points, the percentage of the contract's balance to transfer", name: 'bips' },
     ],
   },
   '8': {
@@ -67,7 +67,7 @@ export const UNISWAP_ROUTER_COMMANDS: Record<string, { name: string; params: { n
       { type: 'uint256', description: 'The amount of input tokens for the trade', name: 'amountIn' },
       { type: 'uint256', description: 'The minimum amount of output tokens the user wants', name: 'amountOutMin' },
       { type: 'address[]', description: 'The UniswapV2 token path to trade along', name: 'path' },
-      { type: 'bool', description: 'A flag for whether the input tokens should come from the msg.sender', name: 'payerIsUser' },
+      { type: 'bool', description: 'Whether the input tokens come from msg.sender (through Permit2) or are already in the router', name: 'payerIsUser' },
     ],
   },
   '9': {
@@ -77,7 +77,7 @@ export const UNISWAP_ROUTER_COMMANDS: Record<string, { name: string; params: { n
       { type: 'uint256', description: 'The amount of output tokens to receive', name: 'amountOut' },
       { type: 'uint256', description: 'The maximum number of input tokens that should be spent', name: 'amountInMax' },
       { type: 'address[]', description: 'The UniswapV2 token path to trade along', name: 'path' },
-      { type: 'bool', description: 'A flag for whether the input tokens should come from the msg.sender', name: 'payerIsUser' },
+      { type: 'bool', description: 'Whether the input tokens come from msg.sender (through Permit2) or are already in the router', name: 'payerIsUser' },
     ],
   },
   '10': {
@@ -99,6 +99,134 @@ export const UNISWAP_ROUTER_COMMANDS: Record<string, { name: string; params: { n
     params: [
       { type: 'address', description: 'The recipient of the ETH', name: 'recipient' },
       { type: 'uint256', description: 'The minimum required ETH to receive from the unwrapping', name: 'amountMin' },
+    ],
+  },
+  '13': {
+    name: 'PERMIT2_TRANSFER_FROM_BATCH',
+    params: [
+      { type: 'bytes', description: 'An array of AllowanceTransferDetails structs describing Permit2 transfers to perform', name: 'batchDetails' },
+    ],
+  },
+  '16': {
+    name: 'SEAPORT',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the Seaport contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the Seaport contract', name: 'data' },
+    ],
+  },
+  '17': {
+    name: 'LOOKS_RARE_721',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the LooksRare contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the LooksRare contract', name: 'data' },
+      { type: 'address', description: 'The recipient of the ERC721', name: 'recipient' },
+      { type: 'address', description: 'The ERC721 token address', name: 'token' },
+      { type: 'uint256', description: 'The ID of the ERC721', name: 'id' },
+    ],
+  },
+  '18': {
+    name: 'NFTX',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the NFTX contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the NFTX contract', name: 'data' },
+    ],
+  },
+  '19': {
+    name: 'CRYPTOPUNKS',
+    params: [
+      { type: 'uint256', description: 'The PunkID to purchase', name: 'punkId' },
+      { type: 'address', description: 'The recipient for the cryptopunk', name: 'recipient' },
+      { type: 'uint256', description: 'The ETH value to forward to the Cryptopunks contract', name: 'value' },
+    ],
+  },
+  '20': {
+    name: 'LOOKS_RARE_1155',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the LooksRare contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the LooksRare contract', name: 'data' },
+      { type: 'address', description: 'The recipient of the ERC1155', name: 'recipient' },
+      { type: 'address', description: 'The ERC1155 token address', name: 'token' },
+      { type: 'uint256', description: 'The ID of the ERC1155', name: 'id' },
+      { type: 'uint256', description: 'The amount of the ERC1155 to transfer', name: 'amount' },
+    ],
+  },
+  '21': {
+    name: 'OWNER_CHECK_721',
+    params: [
+      { type: 'address', description: 'The required owner of the ERC721', name: 'owner' },
+      { type: 'address', description: 'The ERC721 token address', name: 'token' },
+      { type: 'uint256', description: 'The ID of the ERC721', name: 'id' },
+    ],
+  },
+  '22': {
+    name: 'OWNER_CHECK_1155',
+    params: [
+      { type: 'address', description: 'The required owner of the ERC1155', name: 'owner' },
+      { type: 'address', description: 'The ERC1155 token address', name: 'token' },
+      { type: 'uint256', description: 'The ID of the ERC1155', name: 'id' },
+      { type: 'uint256', description: 'The minimum required amount of the ERC1155', name: 'minBalance' },
+    ],
+  },
+  '23': {
+    name: 'SWEEP_ERC721',
+    params: [
+      { type: 'address', description: 'The ERC721 token address to transfer', name: 'token' },
+      { type: 'address', description: 'The recipient of the transfer', name: 'recipient' },
+      { type: 'uint256', description: 'The token ID to transfer', name: 'id' },
+    ],
+  },
+  '24': {
+    name: 'X2Y2_721',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the X2Y2 contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the X2Y2 contract', name: 'data' },
+      { type: 'address', description: 'The recipient of the ERC721', name: 'recipient' },
+      { type: 'address', description: 'The ERC721 token address', name: 'token' },
+      { type: 'uint256', description: 'The ID of the ERC721', name: 'id' },
+    ],
+  },
+  '25': {
+    name: 'SUDOSWAP',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the Sudoswap contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the Sudoswap contract', name: 'data' },
+    ],
+  },
+  '26': {
+    name: 'NFT20',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the NFT20 contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the NFT20 contract', name: 'data' },
+    ],
+  },
+  '27': {
+    name: 'X2Y2_1155',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the X2Y2 contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the X2Y2 contract', name: 'data' },
+      { type: 'address', description: 'The recipient of the ERC1155', name: 'recipient' },
+      { type: 'address', description: 'The ERC1155 token address', name: 'token' },
+      { type: 'uint256', description: 'The ID of the ERC1155', name: 'id' },
+      { type: 'uint256', description: 'The amount of the ERC1155 to transfer', name: 'amount' },
+    ],
+  },
+  '28': {
+    name: 'FOUNDATION',
+    params: [
+      { type: 'uint256', description: 'The ETH value to forward to the Foundation contract', name: 'value' },
+      { type: 'bytes', description: 'The calldata to use to call the Foundation contract', name: 'data' },
+      { type: 'address', description: 'The recipient of the ERC721', name: 'recipient' },
+      { type: 'address', description: 'The ERC721 token address', name: 'token' },
+      { type: 'uint256', description: 'The ID of the ERC721', name: 'id' },
+    ],
+  },
+  '29': {
+    name: 'SWEEP_ERC1155',
+    params: [
+      { type: 'address', description: 'The ERC1155 token address to sweep', name: 'token' },
+      { type: 'address', description: 'The recipient of the sweep', name: 'recipient' },
+      { type: 'uint256', description: 'The token ID to sweep', name: 'id' },
+      { type: 'uint256', description: 'The minimum required tokens to receive from the sweep', name: 'amount' },
     ],
   },
 }
@@ -245,44 +373,26 @@ export function isUniswapRouterData(data: string): boolean {
   return selector === EXECUTE_WITH_DEADLINE_SELECTOR || selector === EXECUTE_SELECTOR
 }
 
-// ABI for Uniswap Universal Router execute functions (JSON format for compatibility)
-const UNISWAP_ROUTER_ABI = [
-  {
-    inputs: [
-      { name: 'commands', type: 'bytes' },
-      { name: 'inputs', type: 'bytes[]' },
-      { name: 'deadline', type: 'uint256' },
-    ],
-    name: 'execute',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'commands', type: 'bytes' },
-      { name: 'inputs', type: 'bytes[]' },
-    ],
-    name: 'execute',
-    type: 'function',
-  },
-]
-
 export function decodeUniswapRouterData(transactionData: string): UniswapDecodeResult | null {
   if (!transactionData || transactionData.length < 10) {
     return null
   }
 
-  // Ensure data starts with 0x
-  const data = transactionData.startsWith('0x') ? transactionData : '0x' + transactionData
+  let hex = transactionData.startsWith('0x') ? transactionData.substring(2) : transactionData
+  if (hex.length % 2 !== 0) hex += '0'
+  const data = '0x' + hex
 
   const selector = data.substring(0, 10).toLowerCase()
   const hasDeadline = selector === EXECUTE_WITH_DEADLINE_SELECTOR
 
   try {
-    const iface = new Interface(UNISWAP_ROUTER_ABI)
+    const abiCoder = AbiCoder.defaultAbiCoder()
+    const calldata = '0x' + data.substring(10)
 
-    // Use decodeFunctionData which is more reliable in ethers v6
-    const functionName = 'execute'
-    const decoded = iface.decodeFunctionData(functionName, data)
+    const types = hasDeadline
+      ? ['bytes', 'bytes[]', 'uint256']
+      : ['bytes', 'bytes[]']
+    const decoded = abiCoder.decode(types, calldata)
 
     const commands = decoded[0] as string
     const inputs = decoded[1] as string[]
