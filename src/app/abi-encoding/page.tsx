@@ -18,6 +18,7 @@ const CACHE_TTL = 60 * 60 * 1000 // 1 hour
 
 type TabType = 'encode' | 'decode'
 type DecodeMode = 'function' | 'struct'
+type SignatureInputMode = 'signature' | 'abi'
 
 interface NestedCall {
   _isNestedCall: true
@@ -138,6 +139,8 @@ function DecodeTab() {
   const [copiedResult, setCopiedResult] = useState(false)
   const [displayContent, setDisplayContent] = useState('')
   const [decodeMode, setDecodeMode] = useState<DecodeMode>('function')
+  const [signatureInputMode, setSignatureInputMode] = useState<SignatureInputMode>('signature')
+  const [abiJson, setAbiJson] = useState('')
   const [structDefinitions, setStructDefinitions] = useState('')
   const [rootStructName, setRootStructName] = useState('')
   const [detectedRootStructs, setDetectedRootStructs] = useState<string[]>([])
@@ -203,6 +206,28 @@ function DecodeTab() {
       setDetectedRootStructs([])
     }
   }, [structDefinitions])
+
+  // Resolve signature from ABI JSON when in ABI input mode
+  useEffect(() => {
+    if (signatureInputMode !== 'abi' || !abiJson.trim() || !abiData) return
+    try {
+      const parsed = JSON.parse(abiJson)
+      const iface = new Interface(parsed)
+
+      const hex = abiData.startsWith('0x') ? abiData : '0x' + abiData
+      if (hex.length < 10) return
+      const selector = hex.substring(0, 10)
+
+      const func = iface.getFunction(selector)
+      if (func) {
+        setSignature(func.format('sighash'))
+      } else {
+        setSignature('')
+      }
+    } catch {
+      setSignature('')
+    }
+  }, [abiJson, abiData, signatureInputMode])
 
   const lookupSignature = async (selector: string) => {
     try {
@@ -971,19 +996,71 @@ function DecodeTab() {
       {/* Signature / Struct Definitions Input */}
       {decodeMode === 'function' ? (
         <div>
-          <label htmlFor="signature" className="block text-sm font-medium mb-2">
-            Function Signature {loading && <span className="text-blue-500 animate-pulse">(Loading...)</span>}
-          </label>
-          <input
-            id="signature"
-            type="text"
-            value={signature}
-            onChange={(e) => setSignature(e.target.value)}
-            placeholder="transfer(address,uint256)"
-            disabled={autoDetect}
-            className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
-          />
-          <p className="text-xs text-gray-500 mt-1">Function signature or full ABI JSON</p>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-sm font-medium">
+              {signatureInputMode === 'signature' || autoDetect ? 'Function Signature' : 'Contract ABI'}
+              {loading && <span className="text-blue-500 animate-pulse ml-1">(Loading...)</span>}
+            </label>
+            {!autoDetect && (
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 shadow-sm">
+                <button
+                  onClick={() => {
+                    setSignatureInputMode('signature')
+                    setAbiJson('')
+                  }}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-all cursor-pointer ${signatureInputMode === 'signature'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  Signature
+                </button>
+                <button
+                  onClick={() => {
+                    setSignatureInputMode('abi')
+                    setSignature('')
+                  }}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-all cursor-pointer ${signatureInputMode === 'abi'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  ABI JSON
+                </button>
+              </div>
+            )}
+          </div>
+          {signatureInputMode === 'signature' || autoDetect ? (
+            <>
+              <input
+                id="signature"
+                type="text"
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+                placeholder="transfer(address,uint256)"
+                disabled={autoDetect}
+                className="w-full p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {autoDetect ? 'Auto-detected from 4byte directory' : 'e.g. transfer(address,uint256)'}
+              </p>
+            </>
+          ) : (
+            <>
+              <textarea
+                id="abi-json"
+                value={abiJson}
+                onChange={(e) => setAbiJson(e.target.value)}
+                placeholder='[{"inputs":[{"name":"to","type":"address"}],"name":"transfer","type":"function",...}]'
+                className="w-full h-32 p-3 border border-gray-300 rounded-xl dark:border-gray-600 dark:bg-gray-800 font-mono text-sm transition-colors"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {signature
+                  ? <>Matched: <code className="text-blue-600 dark:text-blue-400">{signature}</code></>
+                  : 'Paste contract ABI JSON — the function will be matched from the calldata selector'}
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
