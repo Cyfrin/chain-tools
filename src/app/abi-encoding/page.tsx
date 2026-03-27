@@ -349,6 +349,17 @@ function DecodeTab() {
   const decodeNestedBytes = async (value: string): Promise<any> => {
     if (typeof value === 'string' && value.startsWith('0x') && value.length > 10) {
       try {
+        // Check specialized decoders 
+        if (isUniswapRouterData(value)) {
+          const uniswapResult = decodeUniswapRouterData(value)
+          if (uniswapResult) return uniswapResult
+        }
+
+        if (isSendToL1Data(value)) {
+          const sendToL1Result = decodeSendToL1Data(value)
+          if (sendToL1Result) return sendToL1Result
+        }
+
         // Try to decode as function call (check if it starts with a function selector)
         if (value.length >= 10) {
           const selector = value.substring(0, 10)
@@ -469,9 +480,13 @@ function DecodeTab() {
     result += `${spaces}Parameters:\n`
 
     for (const param of command.params) {
-      if (param.name === 'path' && Array.isArray(param.value)) {
-        // Format path specially
+      if (param.name === 'path' && param.type === 'bytes' && Array.isArray(param.value)) {
+        // V3 path: decoded UniswapPathPool[]
         result += `${spaces}  ${param.name}: ${formatUniswapPath(param.value as UniswapPathPool[])}\n`
+        result += `${spaces}    (${param.description})\n`
+      } else if (param.name === 'path' && param.type === 'address[]' && Array.isArray(param.value)) {
+        // V2 path
+        result += `${spaces}  ${param.name}: ${(param.value as string[]).join(' → ')}\n`
         result += `${spaces}    (${param.description})\n`
       } else {
         result += `${spaces}  ${param.name}: ${param.value}\n`
@@ -516,7 +531,7 @@ function DecodeTab() {
         // Try to decode the nested calldata
         if (op.calldata && op.calldata.length > 10) {
           const nestedDecoded = await decodeNestedBytes(op.calldata)
-          if (isNestedCall(nestedDecoded)) {
+          if (isNestedCall(nestedDecoded) || isUniswapResult(nestedDecoded) || isSendToL1Result(nestedDecoded)) {
             result += `${spaces}  Decoded Call:\n`
             result += await formatDecodedResult(nestedDecoded, indent + 2, includeRawData)
           }
@@ -533,7 +548,7 @@ function DecodeTab() {
       result += `${spaces}Parameters:\n`
 
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value) || isMultiSend(value)) {
+        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
           result += `${spaces}  ${key}:\n`
           result += await formatDecodedResult(value, indent + 2, includeRawData)
         } else {
@@ -560,7 +575,7 @@ function DecodeTab() {
         if (tx.data && tx.data !== '0x') {
           // Try to decode the nested transaction data
           const nestedDecoded = await decodeNestedBytes(tx.data)
-          if (isNestedCall(nestedDecoded)) {
+          if (isNestedCall(nestedDecoded) || isUniswapResult(nestedDecoded) || isSendToL1Result(nestedDecoded)) {
             result += `${spaces}    Decoded Call:\n`
             result += await formatDecodedResult(nestedDecoded, indent + 3, includeRawData)
           } else {
@@ -585,7 +600,7 @@ function DecodeTab() {
   }
 
   const formatValue = async (value: any, includeRawData: boolean = false, indent: number = 0): Promise<string> => {
-    if (isNestedCall(value) || isMultiSend(value)) {
+    if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
       return '\n' + await formatDecodedResult(value, indent + 1, includeRawData)
     }
     if (Array.isArray(value)) {
@@ -631,7 +646,7 @@ function DecodeTab() {
     if (data.struct) {
       let result = `Struct: ${data.struct}\nFields:\n`
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value) || isMultiSend(value)) {
+        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
           result += `  ${key}:\n`
           result += await formatDecodedResult(value, 2, includeRawData)
         } else {
@@ -644,7 +659,7 @@ function DecodeTab() {
     // Format the result nicely
     let result = `Function: ${data.function}\nParameters:\n`
     for (const [key, value] of Object.entries(data.parameters)) {
-      if (isNestedCall(value) || isMultiSend(value)) {
+      if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
         result += `  ${key}:\n`
         result += await formatDecodedResult(value, 2, includeRawData)
       } else {
