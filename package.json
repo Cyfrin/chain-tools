@@ -7,7 +7,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest run",
+    "fuzz:calldata-digest": "node scripts/fuzz-calldata-digest.js"
   },
   "dependencies": {
     "@vercel/analytics": "^1.5.0",
