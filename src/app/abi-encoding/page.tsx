@@ -7,6 +7,7 @@ import AIShareButtons from '@/components/AIShareButtons'
 import { isUniswapRouterData, decodeUniswapRouterData, type UniswapDecodeResult, type UniswapRouterCommand, type UniswapPathPool } from '@/lib/uniswap-decoder'
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult, ZKSYNC_L1_MESSENGER_ADDRESS } from '@/lib/sendtol1-decoder'
 import { parseSolidityDefinitions, resolveStructToParamType, detectRootStructs, type ParamTypeDescriptor } from '@/lib/solidity-struct-parser'
+import { computeCalldataDigest } from '@/lib/calldata-digest'
 
 // Client-side cache for signature lookups
 const signatureCache = new Map<string, {
@@ -137,6 +138,7 @@ function DecodeTab() {
   const [loading, setLoading] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
   const [copiedResult, setCopiedResult] = useState(false)
+  const [copiedDigest, setCopiedDigest] = useState(false)
   const [displayContent, setDisplayContent] = useState('')
   const [decodeMode, setDecodeMode] = useState<DecodeMode>('function')
   const [signatureInputMode, setSignatureInputMode] = useState<SignatureInputMode>('signature')
@@ -145,6 +147,8 @@ function DecodeTab() {
   const [rootStructName, setRootStructName] = useState('')
   const [detectedRootStructs, setDetectedRootStructs] = useState<string[]>([])
   const searchParams = useSearchParams()
+
+  const calldataDigest = abiData ? computeCalldataDigest(abiData) : ''
 
   // Load URL parameters on component mount
   useEffect(() => {
@@ -1105,6 +1109,29 @@ function DecodeTab() {
         </div>
       )}
 
+      {/* Calldata Digest (ERC-8213) */}
+      {calldataDigest && (
+        <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Calldata Digest <span className="text-xs font-normal">(ERC-8213)</span>
+            </h4>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(calldataDigest)
+                setCopiedDigest(true)
+                setTimeout(() => setCopiedDigest(false), 2000)
+              }}
+              className={`px-3 py-1.5 text-xs text-white rounded-lg transition-colors cursor-pointer whitespace-nowrap ${copiedDigest ? 'bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              {copiedDigest ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p className="font-mono text-sm break-all">{calldataDigest}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">keccak256(uint256(len(calldata)) || calldata)</p>
+        </div>
+      )}
+
       {/* Results */}
       <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-xl p-5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
@@ -1328,6 +1355,9 @@ function EncodeTab() {
   const [signature, setSignature] = useState('')
   const [jsonData, setJsonData] = useState('')
   const [encodedResult, setEncodedResult] = useState('')
+  const [copiedDigest, setCopiedDigest] = useState(false)
+
+  const calldataDigest = encodedResult ? computeCalldataDigest(encodedResult) : ''
 
   const normalizeAddresses = (data: any[], fragment: FunctionFragment): any[] => {
     return data.map((value, index) => {
@@ -1429,6 +1459,30 @@ function EncodeTab() {
           readOnly
           className="w-full h-32 p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-white dark:bg-gray-800 font-mono text-sm"
         />
+
+        {/* Calldata Digest (ERC-8213) */}
+        {calldataDigest && (
+          <div className="mt-3 p-3 bg-gray-50/80 dark:bg-gray-800/30 border border-gray-200 dark:border-gray-600 rounded-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                  Calldata Digest <span className="font-normal">(ERC-8213)</span>
+                </span>
+                <p className="font-mono text-xs break-all mt-0.5">{calldataDigest}</p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(calldataDigest)
+                  setCopiedDigest(true)
+                  setTimeout(() => setCopiedDigest(false), 2000)
+                }}
+                className={`px-2 py-1 text-xs text-white rounded-lg transition-colors cursor-pointer whitespace-nowrap ${copiedDigest ? 'bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                {copiedDigest ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Example section */}
