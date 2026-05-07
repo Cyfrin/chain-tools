@@ -25,12 +25,15 @@ describe('computeCalldataDigest', () => {
     )
   })
 
-  it('returns empty string for empty input', () => {
+  it('returns empty string when no input was given', () => {
     expect(computeCalldataDigest('')).toBe('')
   })
 
-  it('returns empty string for just 0x prefix', () => {
-    expect(computeCalldataDigest('0x')).toBe('')
+  it('computes a real digest for empty calldata (0x — plain ETH transfer)', () => {
+    // keccak256 of 32 zero bytes
+    expect(computeCalldataDigest('0x')).toBe(
+      '0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563'
+    )
   })
 
   it('returns empty string for odd-length hex', () => {
