@@ -3,7 +3,10 @@ import { AbiCoder } from 'ethers'
 import {
   isUniswapRouterData,
   decodeUniswapRouterData,
+  formatUniswapCommand,
+  formatUniswapPath,
   UNISWAP_ROUTER_COMMANDS,
+  type UniswapRouterCommand,
 } from '@/lib/uniswap-decoder'
 
 // Exact hex from the page example (execute with deadline)
@@ -201,5 +204,71 @@ describe('decodeUniswapRouterData', () => {
     expect(result!.deadline).toBeUndefined()
     expect(result!.commands).toHaveLength(1)
     expect(result!.commands[0].name).toBe('UNWRAP_WETH')
+  })
+})
+
+describe('formatUniswapPath', () => {
+  it('renders an empty path placeholder', () => {
+    expect(formatUniswapPath([])).toBe('(empty path)')
+  })
+
+  it('renders a multi-hop V3 path as a fee-tier chain', () => {
+    const formatted = formatUniswapPath([
+      { firstAddress: '0xAAA', tickSpacing: 500, secondAddress: '0xBBB' },
+      { firstAddress: '0xBBB', tickSpacing: 3000, secondAddress: '0xCCC' },
+    ])
+    expect(formatted).toBe('0xAAA --[500]--> 0xBBB --[3000]--> 0xCCC')
+  })
+})
+
+describe('formatUniswapCommand', () => {
+  const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
+  const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
+
+  it('renders a V2 address[] path as an arrow-joined token list', () => {
+    const command: UniswapRouterCommand = {
+      name: 'V2_SWAP_EXACT_IN',
+      params: [
+        { name: 'path', type: 'address[]', description: 'The UniswapV2 token path', value: [WETH, USDC] },
+      ],
+    }
+
+    const result = formatUniswapCommand(command)
+    expect(result).toContain(`path: ${WETH} → ${USDC}`)
+    // The V2 branch must not fall through to the V3 hop-chain formatting.
+    expect(result).not.toContain('--[')
+  })
+
+  it('renders a V3 bytes path as a hop chain, not an arrow list', () => {
+    const command: UniswapRouterCommand = {
+      name: 'V3_SWAP_EXACT_IN',
+      params: [
+        {
+          name: 'path',
+          type: 'bytes',
+          description: 'The UniswapV3 encoded path',
+          value: [{ firstAddress: WETH, tickSpacing: 500, secondAddress: USDC }],
+        },
+      ],
+    }
+
+    const result = formatUniswapCommand(command)
+    expect(result).toContain(`path: ${WETH} --[500]--> ${USDC}`)
+    expect(result).not.toContain(' → ')
+  })
+
+  it('renders non-path params as plain key/value lines', () => {
+    const command: UniswapRouterCommand = {
+      name: 'WRAP_ETH',
+      params: [
+        { name: 'recipient', type: 'address', description: 'The recipient of the WETH', value: WETH },
+        { name: 'amountMin', type: 'uint256', description: 'The amount of ETH to wrap', value: '1000' },
+      ],
+    }
+
+    const result = formatUniswapCommand(command)
+    expect(result).toContain('Command: WRAP_ETH')
+    expect(result).toContain(`recipient: ${WETH}`)
+    expect(result).toContain('amountMin: 1000')
   })
 })

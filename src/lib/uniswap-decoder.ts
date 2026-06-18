@@ -414,3 +414,46 @@ export function decodeUniswapRouterData(transactionData: string): UniswapDecodeR
     return null
   }
 }
+
+/**
+ * Render a decoded V3 path (`UniswapPathPool[]`) as a human-readable hop chain,
+ * e.g. `0xWETH --[500]--> 0xUSDC --[3000]--> 0xDAI`.
+ */
+export function formatUniswapPath(path: UniswapPathPool[]): string {
+  if (!path || path.length === 0) return '(empty path)'
+  return path
+    .map((pool, i) => {
+      if (i === 0) {
+        return `${pool.firstAddress} --[${pool.tickSpacing}]--> ${pool.secondAddress}`
+      }
+      return ` --[${pool.tickSpacing}]--> ${pool.secondAddress}`
+    })
+    .join('')
+}
+
+/**
+ * Render a single decoded Universal Router command as indented text. V3 `path`
+ * params (encoded `bytes`) render as a hop chain; V2 `path` params (`address[]`)
+ * render as an arrow-joined token list.
+ */
+export function formatUniswapCommand(command: UniswapRouterCommand, indent: number = 0): string {
+  const spaces = '  '.repeat(indent)
+  let result = `${spaces}Command: ${command.name}\n`
+  result += `${spaces}Parameters:\n`
+
+  for (const param of command.params) {
+    if (param.name === 'path' && param.type === 'bytes' && Array.isArray(param.value)) {
+      // V3 path: decoded UniswapPathPool[]
+      result += `${spaces}  ${param.name}: ${formatUniswapPath(param.value as UniswapPathPool[])}\n`
+      result += `${spaces}    (${param.description})\n`
+    } else if (param.name === 'path' && param.type === 'address[]' && Array.isArray(param.value)) {
+      // V2 path: plain token address list
+      result += `${spaces}  ${param.name}: ${(param.value as string[]).join(' → ')}\n`
+      result += `${spaces}    (${param.description})\n`
+    } else {
+      result += `${spaces}  ${param.name}: ${param.value}\n`
+      result += `${spaces}    (${param.description})\n`
+    }
+  }
+  return result
+}
