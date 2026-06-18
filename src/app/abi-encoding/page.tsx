@@ -8,6 +8,8 @@ import { isUniswapRouterData, decodeUniswapRouterData, formatUniswapCommand, typ
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult, ZKSYNC_L1_MESSENGER_ADDRESS } from '@/lib/sendtol1-decoder'
 import { decodeNestedCalldata, type NestedCall, type MultiSendData, type SignatureResolver } from '@/lib/nested-decoder'
 import { parseSolidityDefinitions, resolveStructToParamType, detectRootStructs, type ParamTypeDescriptor } from '@/lib/solidity-struct-parser'
+import { computeCalldataDigest } from '@/lib/calldata-digest'
+import { calldataSelectorOf, canContributeSignature, submitSignatureToFourbyte } from '@/lib/fourbyte-submit'
 
 // Client-side cache for signature lookups
 const signatureCache = new Map<string, {
@@ -119,6 +121,9 @@ function DecodeTab() {
   const [loading, setLoading] = useState(false)
   const [copiedShare, setCopiedShare] = useState(false)
   const [copiedResult, setCopiedResult] = useState(false)
+  const [copiedDigest, setCopiedDigest] = useState(false)
+  const [fourbyteSubmitState, setFourbyteSubmitState] = useState<'idle' | 'submitting' | 'success' | 'exists' | 'error'>('idle')
+  const [fourbyteSubmitError, setFourbyteSubmitError] = useState('')
   const [displayContent, setDisplayContent] = useState('')
   const [decodeMode, setDecodeMode] = useState<DecodeMode>('function')
   const [signatureInputMode, setSignatureInputMode] = useState<SignatureInputMode>('signature')
@@ -127,6 +132,8 @@ function DecodeTab() {
   const [rootStructName, setRootStructName] = useState('')
   const [detectedRootStructs, setDetectedRootStructs] = useState<string[]>([])
   const searchParams = useSearchParams()
+
+  const calldataDigest = abiData ? computeCalldataDigest(abiData) : ''
 
   // Load URL parameters on component mount
   useEffect(() => {
@@ -164,6 +171,12 @@ function DecodeTab() {
     }
     localStorage.setItem('abiDecoderPreferences', JSON.stringify(preferences))
   }, [isFunction, autoDetect, decodeMultiSend, showRawData, decodeMode])
+
+  // Reset the 4byte submission status whenever the signature or calldata changes.
+  useEffect(() => {
+    setFourbyteSubmitState('idle')
+    setFourbyteSubmitError('')
+  }, [signature, abiData])
 
   // Auto-detect root structs when definitions change
   useEffect(() => {
@@ -259,6 +272,31 @@ function DecodeTab() {
       if (selector.length === 10) {
         lookupSignature(selector)
       }
+    }
+  }
+
+  const calldataSelector = calldataSelectorOf(abiData, isFunction)
+
+  // Offer to contribute the signature to 4byte when the user supplied one (typed
+  // or matched from an ABI) that actually decoded the calldata, its selector
+  // matches, and 4byte doesn't already have it.
+  const canSubmitToFourbyte = canContributeSignature({
+    decodeMode,
+    isFunction,
+    signature,
+    decodedFunction: decodedData?.function,
+    hasError: Boolean(decodedData?.error),
+    calldataSelector,
+    knownSignatures: signatureCache.get(calldataSelector)?.signatures ?? [],
+  })
+
+  const submitToFourbyte = async () => {
+    setFourbyteSubmitState('submitting')
+    setFourbyteSubmitError('')
+    const result = await submitSignatureToFourbyte(signature)
+    setFourbyteSubmitState(result.status)
+    if (result.status === 'error') {
+      setFourbyteSubmitError(result.error)
     }
   }
 
@@ -908,6 +946,29 @@ function DecodeTab() {
         </div>
       )}
 
+      {/* Calldata Digest (ERC-8213) */}
+      {calldataDigest && (
+        <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+              Calldata Digest <span className="text-xs font-normal">(ERC-8213)</span>
+            </h4>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(calldataDigest)
+                setCopiedDigest(true)
+                setTimeout(() => setCopiedDigest(false), 2000)
+              }}
+              className={`px-3 py-1.5 text-xs text-white rounded-lg transition-colors cursor-pointer whitespace-nowrap ${copiedDigest ? 'bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              {copiedDigest ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p className="font-mono text-sm break-all">{calldataDigest}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">keccak256(uint256(len(calldata)) || calldata)</p>
+        </div>
+      )}
+
       {/* Results */}
       <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-xl p-5">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
@@ -984,6 +1045,48 @@ function DecodeTab() {
               data={displayContent}
               context="ABI Decoder"
             />
+          </div>
+        )}
+
+        {/* Contribute the signature to the 4byte directory */}
+        {(canSubmitToFourbyte || fourbyteSubmitState !== 'idle') && (
+          <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+            {(fourbyteSubmitState === 'idle' || fourbyteSubmitState === 'submitting') && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                This signature decoded the calldata but isn&rsquo;t in the{' '}
+                <a
+                  href="https://www.4byte.directory/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  4byte directory
+                </a>{' '}
+                yet. Contribute it so others can decode this selector:
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={submitToFourbyte}
+                disabled={fourbyteSubmitState === 'submitting' || fourbyteSubmitState === 'success' || fourbyteSubmitState === 'exists'}
+                className={`px-3 py-1.5 text-xs text-white rounded-lg transition-colors ${fourbyteSubmitState === 'submitting' || fourbyteSubmitState === 'success' || fourbyteSubmitState === 'exists'
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                  }`}
+              >
+                {fourbyteSubmitState === 'submitting' ? 'Submitting…' : 'Submit to 4byte'}
+              </button>
+              <code className="text-xs text-blue-600 dark:text-blue-400 break-all">{signature}</code>
+            </div>
+            {fourbyteSubmitState === 'success' && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-2">Added to the 4byte directory ✓</p>
+            )}
+            {fourbyteSubmitState === 'exists' && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Already in the 4byte directory ✓</p>
+            )}
+            {fourbyteSubmitState === 'error' && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-2">{fourbyteSubmitError || 'Submission failed'}</p>
+            )}
           </div>
         )}
       </div>
@@ -1150,6 +1253,9 @@ function EncodeTab() {
   const [signature, setSignature] = useState('')
   const [jsonData, setJsonData] = useState('')
   const [encodedResult, setEncodedResult] = useState('')
+  const [copiedDigest, setCopiedDigest] = useState(false)
+
+  const calldataDigest = encodedResult ? computeCalldataDigest(encodedResult) : ''
 
   const normalizeAddresses = (data: any[], fragment: FunctionFragment): any[] => {
     return data.map((value, index) => {
@@ -1251,6 +1357,30 @@ function EncodeTab() {
           readOnly
           className="w-full h-32 p-3 border border-blue-200 dark:border-blue-700 rounded-xl bg-white dark:bg-gray-800 font-mono text-sm"
         />
+
+        {/* Calldata Digest (ERC-8213) */}
+        {calldataDigest && (
+          <div className="mt-3 p-3 bg-gray-50/80 dark:bg-gray-800/30 border border-gray-200 dark:border-gray-600 rounded-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                  Calldata Digest <span className="font-normal">(ERC-8213)</span>
+                </span>
+                <p className="font-mono text-xs break-all mt-0.5">{calldataDigest}</p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(calldataDigest)
+                  setCopiedDigest(true)
+                  setTimeout(() => setCopiedDigest(false), 2000)
+                }}
+                className={`px-2 py-1 text-xs text-white rounded-lg transition-colors cursor-pointer whitespace-nowrap ${copiedDigest ? 'bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+              >
+                {copiedDigest ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Example section */}

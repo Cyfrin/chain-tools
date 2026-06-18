@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, Suspense } from 'react';
 import { ethers } from 'ethers';
 import { useSearchParams } from 'next/navigation'
 import AIShareButtons from '@/components/AIShareButtons';
+import { computeCalldataDigest } from '@/lib/calldata-digest';
 
 
 interface SafeHashResult {
@@ -94,6 +95,7 @@ export default function SafeHash() {
 function SafeHashPageContent() {
   const searchParams = useSearchParams();
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedDigest, setCopiedDigest] = useState(false);
 
   const [transaction, setTransaction] = useState<SafeTransaction>({
     to: '',
@@ -125,6 +127,10 @@ function SafeHashPageContent() {
   const [apiError, setApiError] = useState('');
   const [apiLoading, setApiLoading] = useState(false);
   const [apiFieldsError, setApiFieldsError] = useState<{ to?: boolean; data?: boolean }>({});
+
+  const calldataDigest = transaction.data && transaction.data !== '0x'
+    ? computeCalldataDigest(transaction.data)
+    : '';
 
   // Ref for scrolling to results
   const resultsRef = useRef<HTMLDivElement>(null);
@@ -527,7 +533,7 @@ Transaction Details:
 Calculated Hashes:
 - Domain Hash: ${result.domainHash}
 - Message Hash: ${result.messageHash}
-- Safe Transaction Hash: ${result.safeTransactionHash}`;
+- Safe Transaction Hash (EIP-712 Digest): ${result.safeTransactionHash}${calldataDigest ? `\n- Calldata Digest (ERC-8213): ${calldataDigest}` : ''}`;
 
     if (nestedResult) {
       data += `
@@ -553,7 +559,15 @@ Nested Safe Results:
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 p-4 rounded-xl">
             <p className="text-sm text-blue-800 dark:text-blue-200">
               <strong>Note:</strong> Calculate domain hash, message hash, and Safe transaction hash for Safe wallet transactions.
-              Verify these values when signing with your hardware wallet.
+              Verify these values when signing with your hardware wallet. Hash terminology follows{' '}
+              <a
+                href="https://github.com/ethereum/ERCs/pull/1639"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                ERC-8213
+              </a>.
             </p>
           </div>
 
@@ -896,7 +910,9 @@ Nested Safe Results:
                   </div>
 
                   <div className="bg-gradient-to-br from-blue-50 to-white dark:from-blue-900/20 dark:to-gray-900 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
-                    <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Safe Transaction Hash</h4>
+                    <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">
+                      Safe Transaction Hash <span className="text-xs font-normal">(EIP-712 Digest)</span>
+                    </h4>
                     <p className="font-mono text-xs text-blue-800 dark:text-blue-200 break-all">
                       {result.safeTransactionHash}
                     </p>
@@ -904,6 +920,33 @@ Nested Safe Results:
                       This is the hash you should verify when signing
                     </p>
                   </div>
+
+                  {/* Calldata Digest (ERC-8213) */}
+                  {calldataDigest && (
+                    <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <h4 className="font-medium mb-2 text-sm text-gray-600 dark:text-gray-400">
+                          Calldata Digest <span className="text-xs font-normal">(ERC-8213)</span>
+                        </h4>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(calldataDigest)
+                            setCopiedDigest(true)
+                            setTimeout(() => setCopiedDigest(false), 2000)
+                          }}
+                          className={`px-2 py-1 text-xs text-white rounded-lg transition-colors cursor-pointer whitespace-nowrap ${copiedDigest ? 'bg-blue-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        >
+                          {copiedDigest ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      <p className="font-mono text-xs break-all">
+                        {calldataDigest}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                        keccak256(uint256(len(calldata)) || calldata)
+                      </p>
+                    </div>
+                  )}
 
                   {/* AI Share Buttons for main results */}
                   <div className="pt-2">

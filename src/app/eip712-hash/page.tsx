@@ -136,7 +136,18 @@ Calculated Hashes:
     <div className="min-h-screen p-8 font-[family-name:var(--font-geist-sans)]">
       <div className="max-w-4xl mx-auto">
 
-        <h1 className="text-3xl font-bold mb-8">EIP-712 Hash Calculator</h1>
+        <h1 className="text-3xl font-bold mb-2">EIP-712 Hash Calculator</h1>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-8">
+          Hash terminology follows{' '}
+          <a
+            href="https://github.com/ethereum/ERCs/pull/1639"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            ERC-8213
+          </a>
+        </p>
 
         <div className="space-y-6">
           <div className="grid md:grid-cols-2 gap-8">
