@@ -8,6 +8,7 @@ import { isUniswapRouterData, decodeUniswapRouterData, type UniswapDecodeResult,
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult, ZKSYNC_L1_MESSENGER_ADDRESS } from '@/lib/sendtol1-decoder'
 import { parseSolidityDefinitions, resolveStructToParamType, detectRootStructs, type ParamTypeDescriptor } from '@/lib/solidity-struct-parser'
 import { computeCalldataDigest } from '@/lib/calldata-digest'
+import { calldataSelectorOf, canContributeSignature, submitSignatureToFourbyte } from '@/lib/fourbyte-submit'
 
 // Client-side cache for signature lookups
 const signatureCache = new Map<string, {
@@ -292,69 +293,28 @@ function DecodeTab() {
     }
   }
 
-  // The 4-byte selector of the current calldata (function mode only).
-  const calldataSelector = (() => {
-    if (!isFunction || !abiData) return ''
-    const hex = abiData.startsWith('0x') ? abiData : '0x' + abiData
-    return hex.length >= 10 ? hex.substring(0, 10).toLowerCase() : ''
-  })()
+  const calldataSelector = calldataSelectorOf(abiData, isFunction)
 
   // Offer to contribute the signature to 4byte when the user supplied one (typed
   // or matched from an ABI) that actually decoded the calldata, its selector
   // matches, and 4byte doesn't already have it.
-  const canSubmitToFourbyte = (() => {
-    if (decodeMode !== 'function' || !isFunction || !signature) return false
-    if (!decodedData || decodedData.error || decodedData.function !== signature) return false
-    if (!calldataSelector) return false
-
-    let signatureSelector: string
-    try {
-      signatureSelector = FunctionFragment.from(signature).selector.toLowerCase()
-    } catch {
-      return false
-    }
-    if (signatureSelector !== calldataSelector) return false
-
-    const known = signatureCache.get(calldataSelector)?.signatures ?? []
-    return !known.includes(signature)
-  })()
+  const canSubmitToFourbyte = canContributeSignature({
+    decodeMode,
+    isFunction,
+    signature,
+    decodedFunction: decodedData?.function,
+    hasError: Boolean(decodedData?.error),
+    calldataSelector,
+    knownSignatures: signatureCache.get(calldataSelector)?.signatures ?? [],
+  })
 
   const submitToFourbyte = async () => {
-    // Normalize to the canonical signature; the gate guarantees this parses.
-    let textSignature: string
-    try {
-      textSignature = FunctionFragment.from(signature).format('sighash')
-    } catch {
-      setFourbyteSubmitState('error')
-      setFourbyteSubmitError('Not a valid function signature')
-      return
-    }
-
     setFourbyteSubmitState('submitting')
     setFourbyteSubmitError('')
-    try {
-      // Submit straight from the browser so each user's own IP is the subject of
-      // 4byte's anti-spam, rather than funnelling every submission through ours.
-      // Form-encoding keeps this a CORS "simple request" (no preflight); 4byte
-      // responds with Access-Control-Allow-Origin: * so the result is readable.
-      const response = await fetch('https://www.4byte.directory/api/v1/signatures/', {
-        method: 'POST',
-        body: new URLSearchParams({ text_signature: textSignature }),
-      })
-      if (response.status === 200 || response.status === 201) {
-        setFourbyteSubmitState('success')
-        return
-      }
-      const data = await response.json().catch(() => null)
-      if (response.status === 400 && JSON.stringify(data ?? '').toLowerCase().includes('exist')) {
-        setFourbyteSubmitState('exists')
-      } else {
-        setFourbyteSubmitState('error')
-        setFourbyteSubmitError('The 4byte directory rejected the signature')
-      }
-    } catch {
-      setFourbyteSubmitState('error')
-      setFourbyteSubmitError('Could not reach the 4byte directory')
+    const result = await submitSignatureToFourbyte(signature)
+    setFourbyteSubmitState(result.status)
+    if (result.status === 'error') {
+      setFourbyteSubmitError(result.error)
     }
   }
 
