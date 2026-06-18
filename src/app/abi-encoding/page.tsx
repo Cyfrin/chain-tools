@@ -320,26 +320,41 @@ function DecodeTab() {
   })()
 
   const submitToFourbyte = async () => {
+    // Normalize to the canonical signature; the gate guarantees this parses.
+    let textSignature: string
+    try {
+      textSignature = FunctionFragment.from(signature).format('sighash')
+    } catch {
+      setFourbyteSubmitState('error')
+      setFourbyteSubmitError('Not a valid function signature')
+      return
+    }
+
     setFourbyteSubmitState('submitting')
     setFourbyteSubmitError('')
     try {
-      const response = await fetch('/api/signature-submit', {
+      // Submit straight from the browser so each user's own IP is the subject of
+      // 4byte's anti-spam, rather than funnelling every submission through ours.
+      // Form-encoding keeps this a CORS "simple request" (no preflight); 4byte
+      // responds with Access-Control-Allow-Origin: * so the result is readable.
+      const response = await fetch('https://www.4byte.directory/api/v1/signatures/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signature }),
+        body: new URLSearchParams({ text_signature: textSignature }),
       })
-      const data = await response.json()
-      if (response.ok && data.created) {
+      if (response.status === 200 || response.status === 201) {
         setFourbyteSubmitState('success')
-      } else if (data.alreadyExists) {
+        return
+      }
+      const data = await response.json().catch(() => null)
+      if (response.status === 400 && JSON.stringify(data ?? '').toLowerCase().includes('exist')) {
         setFourbyteSubmitState('exists')
       } else {
         setFourbyteSubmitState('error')
-        setFourbyteSubmitError(data.error || 'Submission failed')
+        setFourbyteSubmitError('The 4byte directory rejected the signature')
       }
     } catch {
       setFourbyteSubmitState('error')
-      setFourbyteSubmitError('Could not reach the server')
+      setFourbyteSubmitError('Could not reach the 4byte directory')
     }
   }
 
