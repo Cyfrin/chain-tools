@@ -349,7 +349,7 @@ function DecodeTab() {
   const decodeNestedBytes = async (value: string): Promise<any> => {
     if (typeof value === 'string' && value.startsWith('0x') && value.length > 10) {
       try {
-        // Check specialized decoders 
+        // Check specialized decoders
         if (isUniswapRouterData(value)) {
           const uniswapResult = decodeUniswapRouterData(value)
           if (uniswapResult) return uniswapResult

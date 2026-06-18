@@ -99,7 +99,6 @@ describe('decodeNestedCalldata', () => {
 
   it('falls back to generic decode for non-specialized calldata', async () => {
     // approve(address,uint256) - selector 0x095ea7b3
-    const { AbiCoder } = require('ethers')
     const coder = AbiCoder.defaultAbiCoder()
     const params = coder.encode(
       ['address', 'uint256'],
@@ -260,5 +259,21 @@ describe('decodeMultiSendData edge cases', () => {
     const result = decodeMultiSendData(packed)
     expect(result).not.toBeNull()
     expect(result!.transactions).toHaveLength(3)
+  })
+
+  it('returns null when a declared data length exceeds the buffer', () => {
+    // Header declares 100 bytes of data (0x64) but carries none.
+    const overrun = '0x' + '00' + '0'.repeat(40) + '0'.repeat(64) + '64'.padStart(64, '0')
+
+    expect(decodeMultiSendData(overrun)).toBeNull()
+  })
+
+  it('returns null when trailing bytes remain after the last transaction', () => {
+    const packed = buildMultiSendData([
+      { operation: 0, to: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', value: 0n, data: '0x' },
+    ])
+
+    // Append junk that is too short to form another transaction header.
+    expect(decodeMultiSendData(packed + 'dead')).toBeNull()
   })
 })

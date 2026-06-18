@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { AbiCoder } from 'ethers'
 import {
   isUniswapRouterData,
   decodeUniswapRouterData,
@@ -66,8 +67,7 @@ describe('decodeUniswapRouterData', () => {
   it('decodes a well-formed WRAP_ETH + V3_SWAP_EXACT_IN tx', () => {
     // Build a minimal valid execute(bytes,bytes[],uint256) with
     // WRAP_ETH (0x0b) and V3_SWAP_EXACT_IN (0x00) commands
-    const { AbiCoder: Coder } = require('ethers')
-    const coder = Coder.defaultAbiCoder()
+    const coder = AbiCoder.defaultAbiCoder()
 
     const wrapInput = coder.encode(
       ['address', 'uint256'],
@@ -126,8 +126,7 @@ describe('decodeUniswapRouterData', () => {
   })
 
   it('decodes a V2_SWAP_EXACT_IN command with address[] path', () => {
-    const { AbiCoder: Coder } = require('ethers')
-    const coder = Coder.defaultAbiCoder()
+    const coder = AbiCoder.defaultAbiCoder()
 
     const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
     const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'
@@ -158,8 +157,7 @@ describe('decodeUniswapRouterData', () => {
   })
 
   it('decodes a V2_SWAP_EXACT_OUT command', () => {
-    const { AbiCoder: Coder } = require('ethers')
-    const coder = Coder.defaultAbiCoder()
+    const coder = AbiCoder.defaultAbiCoder()
 
     const WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
     const DAI = '0x6B175474E89094C44Da98b954EedeAC495271d0F'
@@ -183,8 +181,7 @@ describe('decodeUniswapRouterData', () => {
   })
 
   it('decodes execute without deadline (selector 0x24856bc3)', () => {
-    const { AbiCoder: Coder } = require('ethers')
-    const coder = Coder.defaultAbiCoder()
+    const coder = AbiCoder.defaultAbiCoder()
 
     const unwrapInput = coder.encode(
       ['address', 'uint256'],

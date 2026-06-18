@@ -85,6 +85,14 @@ export function decodeMultiSendData(data: string): MultiSendData | null {
       const dataLength = parseInt(dataLengthHex, 16)
       offset += 64
 
+      // A valid multi-send declares exactly as much data as it carries. Reject a
+      // length that is not a number or that runs past the buffer, otherwise
+      // substring would silently truncate and a corrupt blob would decode as
+      // "valid" with a wrong dataLength.
+      if (Number.isNaN(dataLength) || offset + dataLength * 2 > hexData.length) {
+        return null
+      }
+
       const txData = dataLength > 0 ? '0x' + hexData.substring(offset, offset + dataLength * 2) : '0x'
       offset += dataLength * 2
 
@@ -97,7 +105,10 @@ export function decodeMultiSendData(data: string): MultiSendData | null {
       })
     }
 
-    if (transactions.length > 0) {
+    // A well-formed packed multi-send is consumed exactly. Leftover bytes mean
+    // the input was not actually multi-send data, so reject it rather than
+    // returning a false-positive multi-send built from arbitrary bytes.
+    if (transactions.length > 0 && offset === hexData.length) {
       return {
         _isMultiSend: true,
         transactions,
