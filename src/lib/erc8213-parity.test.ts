@@ -46,7 +46,8 @@ function viemEip712Digests(doc: TypedDoc) {
   return {
     domainHash: hashDomain({
       domain: doc.domain,
-      types: doc.types as TypedData,
+      // viem's hashDomain wants mutable arrays (MessageTypeProperty[]).
+      types: doc.types as Record<string, { name: string; type: string }[]>,
     }),
     messageHash: hashStruct({
       data: doc.message,
@@ -69,12 +70,12 @@ function ethersEip712Digests(doc: TypedDoc) {
     domainHash: ethers.TypedDataEncoder.hashDomain(doc.domain),
     messageHash: ethers.TypedDataEncoder.hashStruct(
       doc.primaryType,
-      types as Record<string, ReadonlyArray<{ name: string; type: string }>>,
+      types as Record<string, Array<{ name: string; type: string }>>,
       doc.message,
     ),
     digest: ethers.TypedDataEncoder.hash(
       doc.domain,
-      types as Record<string, ReadonlyArray<{ name: string; type: string }>>,
+      types as Record<string, Array<{ name: string; type: string }>>,
       doc.message,
     ),
   }
