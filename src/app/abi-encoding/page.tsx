@@ -8,6 +8,7 @@ import { isUniswapRouterData, decodeUniswapRouterData, type UniswapDecodeResult,
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult, ZKSYNC_L1_MESSENGER_ADDRESS } from '@/lib/sendtol1-decoder'
 import { parseSolidityDefinitions, resolveStructToParamType, detectRootStructs, type ParamTypeDescriptor } from '@/lib/solidity-struct-parser'
 import { computeCalldataDigest } from '@/lib/calldata-digest'
+import { calldataSelectorOf, canContributeSignature, submitSignatureToFourbyte } from '@/lib/fourbyte-submit'
 
 // Client-side cache for signature lookups
 const signatureCache = new Map<string, {
@@ -139,6 +140,8 @@ function DecodeTab() {
   const [copiedShare, setCopiedShare] = useState(false)
   const [copiedResult, setCopiedResult] = useState(false)
   const [copiedDigest, setCopiedDigest] = useState(false)
+  const [fourbyteSubmitState, setFourbyteSubmitState] = useState<'idle' | 'submitting' | 'success' | 'exists' | 'error'>('idle')
+  const [fourbyteSubmitError, setFourbyteSubmitError] = useState('')
   const [displayContent, setDisplayContent] = useState('')
   const [decodeMode, setDecodeMode] = useState<DecodeMode>('function')
   const [signatureInputMode, setSignatureInputMode] = useState<SignatureInputMode>('signature')
@@ -186,6 +189,12 @@ function DecodeTab() {
     }
     localStorage.setItem('abiDecoderPreferences', JSON.stringify(preferences))
   }, [isFunction, autoDetect, decodeMultiSend, showRawData, decodeMode])
+
+  // Reset the 4byte submission status whenever the signature or calldata changes.
+  useEffect(() => {
+    setFourbyteSubmitState('idle')
+    setFourbyteSubmitError('')
+  }, [signature, abiData])
 
   // Auto-detect root structs when definitions change
   useEffect(() => {
@@ -281,6 +290,31 @@ function DecodeTab() {
       if (selector.length === 10) {
         lookupSignature(selector)
       }
+    }
+  }
+
+  const calldataSelector = calldataSelectorOf(abiData, isFunction)
+
+  // Offer to contribute the signature to 4byte when the user supplied one (typed
+  // or matched from an ABI) that actually decoded the calldata, its selector
+  // matches, and 4byte doesn't already have it.
+  const canSubmitToFourbyte = canContributeSignature({
+    decodeMode,
+    isFunction,
+    signature,
+    decodedFunction: decodedData?.function,
+    hasError: Boolean(decodedData?.error),
+    calldataSelector,
+    knownSignatures: signatureCache.get(calldataSelector)?.signatures ?? [],
+  })
+
+  const submitToFourbyte = async () => {
+    setFourbyteSubmitState('submitting')
+    setFourbyteSubmitError('')
+    const result = await submitSignatureToFourbyte(signature)
+    setFourbyteSubmitState(result.status)
+    if (result.status === 'error') {
+      setFourbyteSubmitError(result.error)
     }
   }
 
@@ -1208,6 +1242,48 @@ function DecodeTab() {
               data={displayContent}
               context="ABI Decoder"
             />
+          </div>
+        )}
+
+        {/* Contribute the signature to the 4byte directory */}
+        {(canSubmitToFourbyte || fourbyteSubmitState !== 'idle') && (
+          <div className="mt-4 pt-4 border-t border-blue-200 dark:border-blue-800">
+            {(fourbyteSubmitState === 'idle' || fourbyteSubmitState === 'submitting') && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                This signature decoded the calldata but isn&rsquo;t in the{' '}
+                <a
+                  href="https://www.4byte.directory/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  4byte directory
+                </a>{' '}
+                yet. Contribute it so others can decode this selector:
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={submitToFourbyte}
+                disabled={fourbyteSubmitState === 'submitting' || fourbyteSubmitState === 'success' || fourbyteSubmitState === 'exists'}
+                className={`px-3 py-1.5 text-xs text-white rounded-lg transition-colors ${fourbyteSubmitState === 'submitting' || fourbyteSubmitState === 'success' || fourbyteSubmitState === 'exists'
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
+                  }`}
+              >
+                {fourbyteSubmitState === 'submitting' ? 'Submitting…' : 'Submit to 4byte'}
+              </button>
+              <code className="text-xs text-blue-600 dark:text-blue-400 break-all">{signature}</code>
+            </div>
+            {fourbyteSubmitState === 'success' && (
+              <p className="text-xs text-green-600 dark:text-green-400 mt-2">Added to the 4byte directory ✓</p>
+            )}
+            {fourbyteSubmitState === 'exists' && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Already in the 4byte directory ✓</p>
+            )}
+            {fourbyteSubmitState === 'error' && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-2">{fourbyteSubmitError || 'Submission failed'}</p>
+            )}
           </div>
         )}
       </div>
