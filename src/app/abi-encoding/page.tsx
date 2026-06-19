@@ -4,8 +4,9 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { AbiCoder, FunctionFragment, Interface, keccak256, toUtf8Bytes, getAddress, ParamType } from 'ethers'
 import AIShareButtons from '@/components/AIShareButtons'
-import { isUniswapRouterData, decodeUniswapRouterData, type UniswapDecodeResult, type UniswapRouterCommand, type UniswapPathPool } from '@/lib/uniswap-decoder'
+import { isUniswapRouterData, decodeUniswapRouterData, formatUniswapCommand, type UniswapDecodeResult } from '@/lib/uniswap-decoder'
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult, ZKSYNC_L1_MESSENGER_ADDRESS } from '@/lib/sendtol1-decoder'
+import { decodeNestedCalldata, type NestedCall, type MultiSendData, type SignatureResolver } from '@/lib/nested-decoder'
 import { parseSolidityDefinitions, resolveStructToParamType, detectRootStructs, type ParamTypeDescriptor } from '@/lib/solidity-struct-parser'
 import { computeCalldataDigest } from '@/lib/calldata-digest'
 import { calldataSelectorOf, canContributeSignature, submitSignatureToFourbyte } from '@/lib/fourbyte-submit'
@@ -21,25 +22,6 @@ const CACHE_TTL = 60 * 60 * 1000 // 1 hour
 type TabType = 'encode' | 'decode'
 type DecodeMode = 'function' | 'struct'
 type SignatureInputMode = 'signature' | 'abi'
-
-interface NestedCall {
-  _isNestedCall: true
-  function: string
-  selector: string
-  parameters: Record<string, any>
-  raw: string
-}
-
-interface MultiSendData {
-  _isMultiSend: true
-  transactions: Array<{
-    operation: number
-    to: string
-    value: string
-    dataLength: number
-    data: string
-  }>
-}
 
 // Type guard functions for specialized decoders
 const isUniswapResult = (obj: any): obj is UniswapDecodeResult => {
@@ -318,170 +300,32 @@ function DecodeTab() {
     }
   }
 
-  const decodeMultiSendData = (data: string): any => {
-    try {
-      // Remove 0x prefix if present
-      let hexData = data.startsWith('0x') ? data.substring(2) : data
-
-      const transactions: any[] = []
-      let offset = 0
-
-      while (offset < hexData.length) {
-        // Each transaction is packed as:
-        // operation (1 byte) + to (20 bytes) + value (32 bytes) + dataLength (32 bytes) + data (variable)
-
-        if (offset + 170 > hexData.length) break // Need at least 85 bytes (170 hex chars) for header
-
-        // Parse operation (1 byte)
-        const operation = parseInt(hexData.substring(offset, offset + 2), 16)
-
-        // Validate operation - must be 0 (Call) or 1 (DelegateCall)
-        // If not, this is likely not multi-send data
-        if (operation !== 0 && operation !== 1) {
-          return null
-        }
-
-        offset += 2
-
-        // Parse to address (20 bytes)
-        const to = '0x' + hexData.substring(offset, offset + 40)
-        offset += 40
-
-        // Parse value (32 bytes)
-        const valueHex = hexData.substring(offset, offset + 64)
-        const value = BigInt('0x' + valueHex).toString()
-        offset += 64
-
-        // Parse data length (32 bytes)
-        const dataLengthHex = hexData.substring(offset, offset + 64)
-        const dataLength = parseInt(dataLengthHex, 16)
-        offset += 64
-
-        // Parse data (variable length)
-        const txData = dataLength > 0 ? '0x' + hexData.substring(offset, offset + dataLength * 2) : '0x'
-        offset += dataLength * 2
-
-        transactions.push({
-          operation,
-          to,
-          value,
-          dataLength,
-          data: txData
-        })
-      }
-
-      // Only return multi-send result if we actually found valid transactions
-      if (transactions.length > 0) {
-        return {
-          _isMultiSend: true,
-          transactions
-        }
-      }
-
-      return null
-    } catch (e) {
-      return null
-    }
-  }
-
-  const decodeNestedBytes = async (value: string): Promise<any> => {
-    if (typeof value === 'string' && value.startsWith('0x') && value.length > 10) {
-      try {
-        // Try to decode as function call (check if it starts with a function selector)
-        if (value.length >= 10) {
-          const selector = value.substring(0, 10)
-
-          // Check cache first
-          const cached = signatureCache.get(selector)
-          let signatures: string[] = []
-
-          if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-            signatures = cached.signatures
-          } else {
-            // Fetch from API
-            try {
-              const response = await fetch(`/api/signature-lookup?selector=${selector}`)
-              const data = await response.json()
-
-              if (data.signatures && data.signatures.length > 0) {
-                signatures = data.signatures
-                signatureCache.set(selector, {
-                  signatures,
-                  timestamp: Date.now()
-                })
-              }
-            } catch (e) {
-              // Ignore API errors for nested decoding
-            }
-          }
-
-          if (signatures.length > 0) {
-            const sig = signatures[0]
-            const fragment = FunctionFragment.from(sig)
-            const calldata = value.substring(10)
-
-            try {
-              const nestedDecoded = AbiCoder.defaultAbiCoder().decode(fragment.inputs, '0x' + calldata)
-
-              // Recursively decode any nested bytes
-              const processedParams: any = {}
-              const decodableParams = FUNCTION_DECODE_CONFIG[sig] || null
-
-              for (let i = 0; i < fragment.inputs.length; i++) {
-                const param = fragment.inputs[i]
-                let paramValue = nestedDecoded[i]
-
-                // Convert BigInt to string
-                if (typeof paramValue === 'bigint') {
-                  paramValue = paramValue.toString()
-                }
-
-                // Recursively decode bytes parameters only if allowed by configuration
-                if (param.type === 'bytes' && typeof paramValue === 'string') {
-                  // Check if this parameter should be decoded based on function configuration
-                  const shouldDecode = decodableParams === null || decodableParams.includes(i)
-
-                  if (shouldDecode) {
-                    // First try multi-send decoding if enabled
-                    if (decodeMultiSend) {
-                      const multiSendResult = decodeMultiSendData(paramValue)
-                      if (multiSendResult) {
-                        paramValue = multiSendResult
-                      } else {
-                        paramValue = await decodeNestedBytes(paramValue)
-                      }
-                    } else {
-                      paramValue = await decodeNestedBytes(paramValue)
-                    }
-                  }
-                }
-
-                processedParams[param.name || `param${i}`] = paramValue
-              }
-
-              return {
-                _isNestedCall: true,
-                function: sig,
-                selector: selector,
-                parameters: processedParams,
-                raw: value
-              }
-            } catch (e) {
-              // If decoding fails, just return the raw value
-              return value
-            }
-          }
-        }
-
-        // If no function signature found, return the raw value
-        return value
-      } catch (e) {
-        return value
-      }
+  // Resolve a 4-byte selector to candidate signatures via the shared client
+  // cache, falling back to the API. The nested decoder swallows a throw here and
+  // degrades to the raw value, so a lookup failure never breaks decoding.
+  const resolveSignatures: SignatureResolver = async (selector: string) => {
+    const cached = signatureCache.get(selector)
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.signatures
     }
 
-    return value
+    const response = await fetch(`/api/signature-lookup?selector=${selector}`)
+    const data = await response.json()
+    const signatures: string[] = data.signatures ?? []
+    if (signatures.length > 0) {
+      signatureCache.set(selector, { signatures, timestamp: Date.now() })
+    }
+    return signatures
   }
+
+  // Decode nested calldata (specialized decoders → multi-send → generic 4byte)
+  // using the shared nested-decoder module so the live tool and its tests run
+  // the same code path.
+  const decodeNested = (value: string) =>
+    decodeNestedCalldata(value, resolveSignatures, {
+      decodeMultiSend,
+      decodableParams: FUNCTION_DECODE_CONFIG,
+    })
 
   const isNestedCall = (obj: any): obj is NestedCall => {
     return obj && typeof obj === 'object' && obj._isNestedCall === true
@@ -489,34 +333,6 @@ function DecodeTab() {
 
   const isMultiSend = (obj: any): obj is MultiSendData => {
     return obj && typeof obj === 'object' && obj._isMultiSend === true
-  }
-
-  const formatUniswapPath = (path: UniswapPathPool[]): string => {
-    if (!path || path.length === 0) return '(empty path)'
-    return path.map((pool, i) => {
-      if (i === 0) {
-        return `${pool.firstAddress} --[${pool.tickSpacing}]--> ${pool.secondAddress}`
-      }
-      return ` --[${pool.tickSpacing}]--> ${pool.secondAddress}`
-    }).join('')
-  }
-
-  const formatUniswapCommand = (command: UniswapRouterCommand, indent: number = 0): string => {
-    const spaces = '  '.repeat(indent)
-    let result = `${spaces}Command: ${command.name}\n`
-    result += `${spaces}Parameters:\n`
-
-    for (const param of command.params) {
-      if (param.name === 'path' && Array.isArray(param.value)) {
-        // Format path specially
-        result += `${spaces}  ${param.name}: ${formatUniswapPath(param.value as UniswapPathPool[])}\n`
-        result += `${spaces}    (${param.description})\n`
-      } else {
-        result += `${spaces}  ${param.name}: ${param.value}\n`
-        result += `${spaces}    (${param.description})\n`
-      }
-    }
-    return result
   }
 
   const formatDecodedResult = async (data: any, indent: number = 0, includeRawData: boolean = false): Promise<string> => {
@@ -553,8 +369,8 @@ function DecodeTab() {
 
         // Try to decode the nested calldata
         if (op.calldata && op.calldata.length > 10) {
-          const nestedDecoded = await decodeNestedBytes(op.calldata)
-          if (isNestedCall(nestedDecoded)) {
+          const nestedDecoded = await decodeNested(op.calldata)
+          if (isNestedCall(nestedDecoded) || isMultiSend(nestedDecoded) || isUniswapResult(nestedDecoded) || isSendToL1Result(nestedDecoded)) {
             result += `${spaces}  Decoded Call:\n`
             result += await formatDecodedResult(nestedDecoded, indent + 2, includeRawData)
           }
@@ -571,7 +387,7 @@ function DecodeTab() {
       result += `${spaces}Parameters:\n`
 
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value) || isMultiSend(value)) {
+        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
           result += `${spaces}  ${key}:\n`
           result += await formatDecodedResult(value, indent + 2, includeRawData)
         } else {
@@ -595,15 +411,12 @@ function DecodeTab() {
         result += `${spaces}    Value: ${tx.value}\n`
         result += `${spaces}    Data Length: ${tx.dataLength}\n`
 
-        if (tx.data && tx.data !== '0x') {
-          // Try to decode the nested transaction data
-          const nestedDecoded = await decodeNestedBytes(tx.data)
-          if (isNestedCall(nestedDecoded)) {
-            result += `${spaces}    Decoded Call:\n`
-            result += await formatDecodedResult(nestedDecoded, indent + 3, includeRawData)
-          } else {
-            result += `${spaces}    Data: ${tx.data}\n`
-          }
+        if (tx.decodedData !== undefined) {
+          // Inner calldata was already decoded by the nested-decoder module.
+          result += `${spaces}    Decoded Call:\n`
+          result += await formatDecodedResult(tx.decodedData, indent + 3, includeRawData)
+        } else if (tx.data && tx.data !== '0x') {
+          result += `${spaces}    Data: ${tx.data}\n`
         } else {
           result += `${spaces}    Data: (empty)\n`
         }
@@ -623,7 +436,7 @@ function DecodeTab() {
   }
 
   const formatValue = async (value: any, includeRawData: boolean = false, indent: number = 0): Promise<string> => {
-    if (isNestedCall(value) || isMultiSend(value)) {
+    if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
       return '\n' + await formatDecodedResult(value, indent + 1, includeRawData)
     }
     if (Array.isArray(value)) {
@@ -669,7 +482,7 @@ function DecodeTab() {
     if (data.struct) {
       let result = `Struct: ${data.struct}\nFields:\n`
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value) || isMultiSend(value)) {
+        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
           result += `  ${key}:\n`
           result += await formatDecodedResult(value, 2, includeRawData)
         } else {
@@ -682,7 +495,7 @@ function DecodeTab() {
     // Format the result nicely
     let result = `Function: ${data.function}\nParameters:\n`
     for (const [key, value] of Object.entries(data.parameters)) {
-      if (isNestedCall(value) || isMultiSend(value)) {
+      if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
         result += `  ${key}:\n`
         result += await formatDecodedResult(value, 2, includeRawData)
       } else {
@@ -893,17 +706,7 @@ function DecodeTab() {
           const shouldDecode = decodableParams === null || decodableParams.includes(i)
 
           if (shouldDecode) {
-            // First try multi-send decoding if enabled
-            if (decodeMultiSend) {
-              const multiSendResult = decodeMultiSendData(paramValue)
-              if (multiSendResult) {
-                paramValue = multiSendResult
-              } else {
-                paramValue = await decodeNestedBytes(paramValue)
-              }
-            } else {
-              paramValue = await decodeNestedBytes(paramValue)
-            }
+            paramValue = await decodeNested(paramValue)
           }
         }
 
@@ -1347,6 +1150,25 @@ function DecodeTab() {
                 </button>
                 <div className="text-gray-600 dark:text-gray-400 mt-1">
                   <p>Uniswap V3 swap (WETH → USDC) with automatic command decoding.</p>
+                </div>
+              </div>
+
+              <div>
+                <span className="font-medium">Uniswap inside Safe multiSend:</span>
+                <button
+                  onClick={() => {
+                    setAbiData('0x8d80ff0a0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000037200c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044095ea7b30000000000000000000000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad000000000000000000000000000000000000000000000000016345785d8a0000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000000000000000002843593564c000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000065f5e10000000000000000000000000000000000000000000000000000000000000000020b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000016345785d8a00000000000000000000000000000000000000000000000000000000000002faf08000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f4a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000000000000000000000000000000000000000000000000000')
+                    setSignature('multiSend(bytes)')
+                    setIsFunction(true)
+                    setAutoDetect(true)
+                    setDecodeMultiSend(true)
+                  }}
+                  className="ml-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+                >
+                  Try Example
+                </button>
+                <div className="text-gray-600 dark:text-gray-400 mt-1">
+                  <p>Safe multi-send batching an ERC-20 approve and a Uniswap V3 swap (WETH → USDC), with the nested router commands decoded.</p>
                 </div>
               </div>
 
