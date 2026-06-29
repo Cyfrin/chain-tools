@@ -48,6 +48,10 @@ export interface DecodeOptions {
   decodableParams?: Record<string, number[]>
 }
 
+// One 32-byte word minus a byte, in hex chars (31 bytes). The most ABI
+// zero-padding a trailing `bytes` value can carry.
+const MAX_TRAILING_PAD_HEX = 62
+
 /**
  * Parse Safe multi-send packed data into individual transactions.
  *
@@ -105,10 +109,16 @@ export function decodeMultiSendData(data: string): MultiSendData | null {
       })
     }
 
-    // A well-formed packed multi-send is consumed exactly. Leftover bytes mean
-    // the input was not actually multi-send data, so reject it rather than
-    // returning a false-positive multi-send built from arbitrary bytes.
-    if (transactions.length > 0 && offset === hexData.length) {
+    // A well-formed packed multi-send is consumed exactly, but a `bytes` value
+    // is often carried with its 32-byte ABI right-padding. Tolerate a tail of
+    // trailing zero bytes up to one byte short of a full word (31 bytes); any
+    // non-zero leftover, or more padding than that, means the input was not
+    // actually multi-send data, so reject it rather than returning a
+    // false-positive multi-send built from arbitrary bytes.
+    const trailing = hexData.substring(offset)
+    const isTolerableZeroPadding =
+      trailing.length <= MAX_TRAILING_PAD_HEX && /^0*$/.test(trailing)
+    if (transactions.length > 0 && isTolerableZeroPadding) {
       return {
         _isMultiSend: true,
         transactions,
@@ -119,6 +129,33 @@ export function decodeMultiSendData(data: string): MultiSendData | null {
   } catch {
     return null
   }
+}
+
+/**
+ * Decode a packed multi-send payload and recursively decode each inner call's
+ * data, attaching the result to `tx.decodedData`. Returns null when `value` is
+ * not a valid packed multi-send.
+ */
+export async function decodeMultiSendTransactions(
+  value: string,
+  resolveSignatures: SignatureResolver,
+  options: DecodeOptions = {}
+): Promise<MultiSendData | null> {
+  const multiSendResult = decodeMultiSendData(value)
+  if (!multiSendResult) {
+    return null
+  }
+
+  for (const tx of multiSendResult.transactions) {
+    if (tx.data && tx.data !== '0x' && tx.data.length > 10) {
+      const decoded = await decodeNestedCalldata(tx.data, resolveSignatures, options)
+      if (decoded !== tx.data) {
+        tx.decodedData = decoded
+      }
+    }
+  }
+
+  return multiSendResult
 }
 
 export async function decodeNestedCalldata(
@@ -143,16 +180,8 @@ export async function decodeNestedCalldata(
   }
 
   if (shouldDecodeMultiSend) {
-    const multiSendResult = decodeMultiSendData(value)
+    const multiSendResult = await decodeMultiSendTransactions(value, resolveSignatures, options)
     if (multiSendResult) {
-      for (const tx of multiSendResult.transactions) {
-        if (tx.data && tx.data !== '0x' && tx.data.length > 10) {
-          const decoded = await decodeNestedCalldata(tx.data, resolveSignatures, options)
-          if (decoded !== tx.data) {
-            tx.decodedData = decoded
-          }
-        }
-      }
       return multiSendResult
     }
   }
@@ -190,24 +219,10 @@ export async function decodeNestedCalldata(
         const shouldDecode = allowedParams === null || allowedParams.includes(i)
 
         if (shouldDecode) {
-          if (shouldDecodeMultiSend) {
-            const multiSendResult = decodeMultiSendData(paramValue)
-            if (multiSendResult) {
-              for (const tx of multiSendResult.transactions) {
-                if (tx.data && tx.data !== '0x' && tx.data.length > 10) {
-                  const innerDecoded = await decodeNestedCalldata(tx.data, resolveSignatures, options)
-                  if (innerDecoded !== tx.data) {
-                    tx.decodedData = innerDecoded
-                  }
-                }
-              }
-              paramValue = multiSendResult
-            } else {
-              paramValue = await decodeNestedCalldata(paramValue, resolveSignatures, options)
-            }
-          } else {
-            paramValue = await decodeNestedCalldata(paramValue, resolveSignatures, options)
-          }
+          const multiSendResult = shouldDecodeMultiSend
+            ? await decodeMultiSendTransactions(paramValue, resolveSignatures, options)
+            : null
+          paramValue = multiSendResult ?? await decodeNestedCalldata(paramValue, resolveSignatures, options)
         }
       }
 
