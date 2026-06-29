@@ -6,7 +6,7 @@ import { AbiCoder, FunctionFragment, Interface, keccak256, toUtf8Bytes, getAddre
 import AIShareButtons from '@/components/AIShareButtons'
 import { isUniswapRouterData, decodeUniswapRouterData, formatUniswapCommand, type UniswapDecodeResult } from '@/lib/uniswap-decoder'
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult, ZKSYNC_L1_MESSENGER_ADDRESS } from '@/lib/sendtol1-decoder'
-import { decodeNestedCalldata, type NestedCall, type MultiSendData, type SignatureResolver } from '@/lib/nested-decoder'
+import { decodeNestedCalldata, decodeMultiSendTransactions, type NestedCall, type MultiSendData, type SignatureResolver } from '@/lib/nested-decoder'
 import { parseSolidityDefinitions, resolveStructToParamType, detectRootStructs, type ParamTypeDescriptor } from '@/lib/solidity-struct-parser'
 import { computeCalldataDigest } from '@/lib/calldata-digest'
 import { calldataSelectorOf, canContributeSignature, submitSignatureToFourbyte } from '@/lib/fourbyte-submit'
@@ -318,14 +318,16 @@ function DecodeTab() {
     return signatures
   }
 
+  const nestedDecodeOptions = {
+    decodeMultiSend,
+    decodableParams: FUNCTION_DECODE_CONFIG,
+  }
+
   // Decode nested calldata (specialized decoders → multi-send → generic 4byte)
   // using the shared nested-decoder module so the live tool and its tests run
   // the same code path.
   const decodeNested = (value: string) =>
-    decodeNestedCalldata(value, resolveSignatures, {
-      decodeMultiSend,
-      decodableParams: FUNCTION_DECODE_CONFIG,
-    })
+    decodeNestedCalldata(value, resolveSignatures, nestedDecodeOptions)
 
   const isNestedCall = (obj: any): obj is NestedCall => {
     return obj && typeof obj === 'object' && obj._isNestedCall === true
@@ -475,6 +477,11 @@ function DecodeTab() {
 
     // Handle sendToL1 results
     if (isSendToL1Result(data)) {
+      return await formatDecodedResult(data, 0, includeRawData)
+    }
+
+    // Handle top-level multi-send results
+    if (isMultiSend(data)) {
       return await formatDecodedResult(data, 0, includeRawData)
     }
 
@@ -657,6 +664,22 @@ function DecodeTab() {
           setDecodedData({ error: `sendToL1 decode error: ${e}` })
           return
         }
+      }
+    }
+
+    // Detect a bare packed Safe multi-send payload pasted without its
+    // multiSend(bytes) wrapper. Wrapped multiSend calldata begins with the
+    // 0x8d80ff0a selector, so this returns null for it and decoding falls
+    // through to the signature-based path below.
+    if (isFunction && decodeMultiSend) {
+      const multiSendResult = await decodeMultiSendTransactions(
+        abiData.trim(),
+        resolveSignatures,
+        nestedDecodeOptions
+      )
+      if (multiSendResult) {
+        setDecodedData(multiSendResult)
+        return
       }
     }
 

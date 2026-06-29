@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { AbiCoder } from 'ethers'
 import { isUniswapRouterData, decodeUniswapRouterData } from '@/lib/uniswap-decoder'
-import { decodeMultiSendData, decodeNestedCalldata } from '@/lib/nested-decoder'
+import { decodeMultiSendData, decodeMultiSendTransactions, decodeNestedCalldata } from '@/lib/nested-decoder'
 
 // Uniswap execute with deadline calldata: WRAP_ETH + V3_SWAP_EXACT_IN
 const UNISWAP_CALLDATA = '0x3593564c000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000065f5e10000000000000000000000000000000000000000000000000000000000000000020b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000016345785d8a00000000000000000000000000000000000000000000000000000000000002faf08000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f4a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000000000000000000000'
@@ -275,5 +275,64 @@ describe('decodeMultiSendData edge cases', () => {
 
     // Append junk that is too short to form another transaction header.
     expect(decodeMultiSendData(packed + 'dead')).toBeNull()
+  })
+
+  it('tolerates trailing zero padding (ABI right-padding of the bytes value)', () => {
+    const packed = buildMultiSendData([
+      { operation: 0, to: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', value: 0n, data: '0x12345678' },
+    ])
+
+    // A real Safe multiSend(bytes) carries the packed payload right-padded to a
+    // 32-byte boundary; a hand-extracted payload keeps those trailing zero bytes.
+    const result = decodeMultiSendData(packed + '00'.repeat(12))
+    expect(result).not.toBeNull()
+    expect(result!.transactions).toHaveLength(1)
+    expect(result!.transactions[0].data).toBe('0x12345678')
+  })
+
+  it('tolerates up to 31 zero-padding bytes but rejects a full padding word', () => {
+    const packed = buildMultiSendData([
+      { operation: 0, to: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', value: 0n, data: '0x' },
+    ])
+
+    expect(decodeMultiSendData(packed + '00'.repeat(31))).not.toBeNull()
+    expect(decodeMultiSendData(packed + '00'.repeat(32))).toBeNull()
+  })
+
+  it('rejects short non-zero trailing bytes', () => {
+    const packed = buildMultiSendData([
+      { operation: 0, to: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', value: 0n, data: '0x' },
+    ])
+
+    // A non-zero leftover is not padding, even when it is short.
+    expect(decodeMultiSendData(packed + '00000001')).toBeNull()
+  })
+})
+
+describe('decodeMultiSendTransactions', () => {
+  const noopResolver = async () => [] as string[]
+
+  it('returns null for data that is not a packed multi-send', async () => {
+    const result = await decodeMultiSendTransactions(UNISWAP_CALLDATA, noopResolver, { decodeMultiSend: true })
+    expect(result).toBeNull()
+  })
+
+  it('decodes a bare packed multi-send (with trailing padding) and its inner calls', async () => {
+    const UNISWAP_ROUTER = '0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD'
+    const packed = buildMultiSendData([
+      { operation: 0, to: UNISWAP_ROUTER, value: 0n, data: UNISWAP_CALLDATA },
+    ])
+
+    // Mirrors a payload pasted without its multiSend(bytes) wrapper, with the
+    // bytes value's trailing ABI zero-padding still attached.
+    const result = await decodeMultiSendTransactions(packed + '00'.repeat(12), noopResolver, { decodeMultiSend: true })
+
+    expect(result).not.toBeNull()
+    expect(result!._isMultiSend).toBe(true)
+    expect(result!.transactions).toHaveLength(1)
+
+    const inner = result!.transactions[0].decodedData as any
+    expect(inner._isUniswapRouter).toBe(true)
+    expect(inner.commands[0].name).toBe('WRAP_ETH')
   })
 })
