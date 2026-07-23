@@ -6,6 +6,7 @@ import { AbiCoder, FunctionFragment, Interface, keccak256, toUtf8Bytes, getAddre
 import AIShareButtons from '@/components/AIShareButtons'
 import { isUniswapRouterData, decodeUniswapRouterData, formatUniswapCommand, type UniswapDecodeResult } from '@/lib/uniswap-decoder'
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult, ZKSYNC_L1_MESSENGER_ADDRESS } from '@/lib/sendtol1-decoder'
+import { decodeArbitrumGovernanceData, decodeArbitrumRawLeaves, formatArbitrumGovernanceResult, type ArbitrumGovernanceDecodeResult } from '@/lib/arbitrum-decoder'
 import { decodeNestedCalldata, decodeMultiSendTransactions, type NestedCall, type MultiSendData, type SignatureResolver } from '@/lib/nested-decoder'
 import { parseSolidityDefinitions, resolveStructToParamType, detectRootStructs, type ParamTypeDescriptor } from '@/lib/solidity-struct-parser'
 import { computeCalldataDigest } from '@/lib/calldata-digest'
@@ -30,6 +31,10 @@ const isUniswapResult = (obj: any): obj is UniswapDecodeResult => {
 
 const isSendToL1Result = (obj: any): obj is SendToL1DecodeResult => {
   return obj && typeof obj === 'object' && obj._isSendToL1 === true
+}
+
+const isArbitrumResult = (obj: any): obj is ArbitrumGovernanceDecodeResult => {
+  return obj && typeof obj === 'object' && obj._isArbitrumGovernance === true
 }
 
 // Configuration for which bytes parameters should be decoded for specific functions
@@ -372,7 +377,7 @@ function DecodeTab() {
         // Try to decode the nested calldata
         if (op.calldata && op.calldata.length > 10) {
           const nestedDecoded = await decodeNested(op.calldata)
-          if (isNestedCall(nestedDecoded) || isMultiSend(nestedDecoded) || isUniswapResult(nestedDecoded) || isSendToL1Result(nestedDecoded)) {
+          if (isNestedCall(nestedDecoded) || isMultiSend(nestedDecoded) || isUniswapResult(nestedDecoded) || isSendToL1Result(nestedDecoded) || isArbitrumResult(nestedDecoded)) {
             result += `${spaces}  Decoded Call:\n`
             result += await formatDecodedResult(nestedDecoded, indent + 2, includeRawData)
           }
@@ -382,6 +387,15 @@ function DecodeTab() {
       return result
     }
 
+    // Handle Arbitrum governance results
+    if (isArbitrumResult(data)) {
+      return await formatArbitrumGovernanceResult(data, {
+        indent,
+        includeRaw: includeRawData,
+        formatLeaf: (decoded, leafIndent) => formatDecodedResult(decoded, leafIndent, includeRawData),
+      })
+    }
+
     if (isNestedCall(data)) {
       // Format nested function call
       let result = `${spaces}Function: ${data.function}\n`
@@ -389,7 +403,7 @@ function DecodeTab() {
       result += `${spaces}Parameters:\n`
 
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
+        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value) || isArbitrumResult(value)) {
           result += `${spaces}  ${key}:\n`
           result += await formatDecodedResult(value, indent + 2, includeRawData)
         } else {
@@ -438,7 +452,7 @@ function DecodeTab() {
   }
 
   const formatValue = async (value: any, includeRawData: boolean = false, indent: number = 0): Promise<string> => {
-    if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
+    if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value) || isArbitrumResult(value)) {
       return '\n' + await formatDecodedResult(value, indent + 1, includeRawData)
     }
     if (Array.isArray(value)) {
@@ -480,6 +494,11 @@ function DecodeTab() {
       return await formatDecodedResult(data, 0, includeRawData)
     }
 
+    // Handle Arbitrum governance results
+    if (isArbitrumResult(data)) {
+      return await formatDecodedResult(data, 0, includeRawData)
+    }
+
     // Handle top-level multi-send results
     if (isMultiSend(data)) {
       return await formatDecodedResult(data, 0, includeRawData)
@@ -489,7 +508,7 @@ function DecodeTab() {
     if (data.struct) {
       let result = `Struct: ${data.struct}\nFields:\n`
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
+        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value) || isArbitrumResult(value)) {
           result += `  ${key}:\n`
           result += await formatDecodedResult(value, 2, includeRawData)
         } else {
@@ -502,7 +521,7 @@ function DecodeTab() {
     // Format the result nicely
     let result = `Function: ${data.function}\nParameters:\n`
     for (const [key, value] of Object.entries(data.parameters)) {
-      if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value)) {
+      if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value) || isArbitrumResult(value)) {
         result += `  ${key}:\n`
         result += await formatDecodedResult(value, 2, includeRawData)
       } else {
@@ -664,6 +683,16 @@ function DecodeTab() {
           setDecodedData({ error: `sendToL1 decode error: ${e}` })
           return
         }
+      }
+
+      // Try Arbitrum governance decoder. Detection works by decoding: null
+      // means "not an Arbitrum proposal" (e.g. a generic timelock call) and
+      // decoding falls through to the signature-based path.
+      const arbitrumResult = decodeArbitrumGovernanceData(abiData)
+      if (arbitrumResult) {
+        await decodeArbitrumRawLeaves(arbitrumResult, decodeNested)
+        setDecodedData(arbitrumResult)
+        return
       }
     }
 
@@ -1192,6 +1221,24 @@ function DecodeTab() {
                 </button>
                 <div className="text-gray-600 dark:text-gray-400 mt-1">
                   <p>Safe multi-send batching an ERC-20 approve and a Uniswap V3 swap (WETH → USDC), with the nested router commands decoded.</p>
+                </div>
+              </div>
+
+              <div>
+                <span className="font-medium">Arbitrum Governance Proposal:</span>
+                <button
+                  onClick={() => {
+                    setAbiData('0x01d5062a0000000000000000000000000000000000000000000000000000000000000064000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a8c0000000000000000000000000000000000000000000000000000000000000003c4928c169a000000000000000000000000e6841d92b0c345144506576ec13ecf5103ac7f49000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000003448f2a0bb000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000140000000000000000000000000000000000000000000000000000000000000000002057286e2d5bc0d7aece5ed0e126215650d99f18f6deeb6e23c97ad06dae48e000000000000000000000000000000000000000000000000000000000003f4800000000000000000000000000000000000000000000000000000000000000001000000000000000000000000a723c008e76e379c55599d2e4d93879beafda79c000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000001a00000000000000000000000004dbd4fc535ac27206064b68ffcf827b0a60bab3f000000000000000000000000cf57572261c7c2bcf21ffd220ea7d1a27d40a82700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000a4bca8c7b5000000000000000000000000912ce59144191c1204e64559fe8253a0e49e654800000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000024ec20b526ffffffffffffffffffffffffffffffffffffffffffd5ad352eec3ec51bda416e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000')
+                    setSignature('')
+                    setIsFunction(true)
+                    setAutoDetect(true)
+                  }}
+                  className="ml-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+                >
+                  Try Example
+                </button>
+                <div className="text-gray-600 dark:text-gray-400 mt-1">
+                  <p>Arbitrum DAO proposal round trip: the L2 timelock schedules an ArbSys sendTxToL1 message to the L1 timelock, whose scheduleBatch targets the RETRYABLE_TICKET_MAGIC sentinel to create a retryable ticket back to L2, calling the ARB token through the UpgradeExecutor.</p>
                 </div>
               </div>
 

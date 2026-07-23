@@ -11,6 +11,7 @@
 import { AbiCoder, FunctionFragment } from 'ethers'
 import { isUniswapRouterData, decodeUniswapRouterData, type UniswapDecodeResult } from './uniswap-decoder'
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult } from './sendtol1-decoder'
+import { decodeArbitrumGovernanceData, decodeArbitrumRawLeaves, type ArbitrumGovernanceDecodeResult } from './arbitrum-decoder'
 
 export interface NestedCall {
   _isNestedCall: true
@@ -37,6 +38,7 @@ export interface MultiSendData {
 export type DecodedNestedResult =
   | UniswapDecodeResult
   | SendToL1DecodeResult
+  | ArbitrumGovernanceDecodeResult
   | NestedCall
   | MultiSendData
   | string
@@ -177,6 +179,17 @@ export async function decodeNestedCalldata(
   if (isSendToL1Data(value)) {
     const sendToL1Result = decodeSendToL1Data(value)
     if (sendToL1Result) return sendToL1Result
+  }
+
+  // Arbitrum governance detection works by decoding: null means the data is
+  // not an Arbitrum proposal (e.g. a generic OZ timelock call) and decoding
+  // falls through to the signature-based path.
+  const arbitrumResult = decodeArbitrumGovernanceData(value)
+  if (arbitrumResult) {
+    await decodeArbitrumRawLeaves(arbitrumResult, (calldata) =>
+      decodeNestedCalldata(calldata, resolveSignatures, options)
+    )
+    return arbitrumResult
   }
 
   if (shouldDecodeMultiSend) {
