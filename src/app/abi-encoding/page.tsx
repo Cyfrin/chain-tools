@@ -7,7 +7,7 @@ import AIShareButtons from '@/components/AIShareButtons'
 import { isUniswapRouterData, decodeUniswapRouterData, formatUniswapCommand, type UniswapDecodeResult } from '@/lib/uniswap-decoder'
 import { isSendToL1Data, decodeSendToL1Data, type SendToL1DecodeResult, ZKSYNC_L1_MESSENGER_ADDRESS } from '@/lib/sendtol1-decoder'
 import { decodeArbitrumGovernanceData, decodeArbitrumRawLeaves, formatArbitrumGovernanceResult, type ArbitrumGovernanceDecodeResult } from '@/lib/arbitrum-decoder'
-import { decodeNestedCalldata, decodeMultiSendTransactions, type NestedCall, type MultiSendData, type SignatureResolver } from '@/lib/nested-decoder'
+import { decodeNestedCalldata, decodeMultiSendTransactions, decodeAggregate3ValueCalls, type NestedCall, type MultiSendData, type Aggregate3ValueData, type SignatureResolver } from '@/lib/nested-decoder'
 import { parseSolidityDefinitions, resolveStructToParamType, detectRootStructs, type ParamTypeDescriptor } from '@/lib/solidity-struct-parser'
 import { computeCalldataDigest } from '@/lib/calldata-digest'
 import { calldataSelectorOf, canContributeSignature, submitSignatureToFourbyte } from '@/lib/fourbyte-submit'
@@ -342,6 +342,15 @@ function DecodeTab() {
     return obj && typeof obj === 'object' && obj._isMultiSend === true
   }
 
+  const isAggregate3Value = (obj: any): obj is Aggregate3ValueData => {
+    return obj && typeof obj === 'object' && obj._isAggregate3Value === true
+  }
+
+  // True when a decoder produced a structured result rather than the raw hex string.
+  const isDecodedResult = (obj: any): boolean =>
+    isNestedCall(obj) || isMultiSend(obj) || isAggregate3Value(obj) ||
+    isUniswapResult(obj) || isSendToL1Result(obj) || isArbitrumResult(obj)
+
   const formatDecodedResult = async (data: any, indent: number = 0, includeRawData: boolean = false): Promise<string> => {
     const spaces = '  '.repeat(indent)
 
@@ -377,7 +386,7 @@ function DecodeTab() {
         // Try to decode the nested calldata
         if (op.calldata && op.calldata.length > 10) {
           const nestedDecoded = await decodeNested(op.calldata)
-          if (isNestedCall(nestedDecoded) || isMultiSend(nestedDecoded) || isUniswapResult(nestedDecoded) || isSendToL1Result(nestedDecoded) || isArbitrumResult(nestedDecoded)) {
+          if (isDecodedResult(nestedDecoded)) {
             result += `${spaces}  Decoded Call:\n`
             result += await formatDecodedResult(nestedDecoded, indent + 2, includeRawData)
           }
@@ -403,7 +412,7 @@ function DecodeTab() {
       result += `${spaces}Parameters:\n`
 
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value) || isArbitrumResult(value)) {
+        if (isDecodedResult(value)) {
           result += `${spaces}  ${key}:\n`
           result += await formatDecodedResult(value, indent + 2, includeRawData)
         } else {
@@ -439,6 +448,29 @@ function DecodeTab() {
       }
 
       return result
+    } else if (isAggregate3Value(data)) {
+      // Format Multicall3 aggregate3Value calls
+      let result = `${spaces}Multicall3 aggregate3Value (${data.calls.length} calls):\n`
+
+      for (let i = 0; i < data.calls.length; i++) {
+        const call = data.calls[i]
+        result += `${spaces}  [${i}] Call:\n`
+        result += `${spaces}    Target: ${call.target}\n`
+        result += `${spaces}    Allow Failure: ${call.allowFailure}\n`
+        result += `${spaces}    Value: ${call.value}\n`
+
+        if (call.decodedData !== undefined) {
+          // Inner calldata was already decoded by the nested-decoder module.
+          result += `${spaces}    Decoded Call:\n`
+          result += await formatDecodedResult(call.decodedData, indent + 3, includeRawData)
+        } else if (call.callData && call.callData !== '0x') {
+          result += `${spaces}    Calldata: ${call.callData}\n`
+        } else {
+          result += `${spaces}    Calldata: (empty)\n`
+        }
+      }
+
+      return result
     } else if (Array.isArray(data)) {
       let result = `${spaces}[\n`
       for (let i = 0; i < data.length; i++) {
@@ -452,7 +484,7 @@ function DecodeTab() {
   }
 
   const formatValue = async (value: any, includeRawData: boolean = false, indent: number = 0): Promise<string> => {
-    if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value) || isArbitrumResult(value)) {
+    if (isDecodedResult(value)) {
       return '\n' + await formatDecodedResult(value, indent + 1, includeRawData)
     }
     if (Array.isArray(value)) {
@@ -484,23 +516,9 @@ function DecodeTab() {
       return data.error
     }
 
-    // Handle Uniswap results
-    if (isUniswapResult(data)) {
-      return await formatDecodedResult(data, 0, includeRawData)
-    }
-
-    // Handle sendToL1 results
-    if (isSendToL1Result(data)) {
-      return await formatDecodedResult(data, 0, includeRawData)
-    }
-
-    // Handle Arbitrum governance results
-    if (isArbitrumResult(data)) {
-      return await formatDecodedResult(data, 0, includeRawData)
-    }
-
-    // Handle top-level multi-send results
-    if (isMultiSend(data)) {
+    // Handle top-level specialized decoder results (Uniswap, sendToL1,
+    // Arbitrum, multi-send, Multicall3)
+    if (isDecodedResult(data)) {
       return await formatDecodedResult(data, 0, includeRawData)
     }
 
@@ -508,7 +526,7 @@ function DecodeTab() {
     if (data.struct) {
       let result = `Struct: ${data.struct}\nFields:\n`
       for (const [key, value] of Object.entries(data.parameters)) {
-        if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value) || isArbitrumResult(value)) {
+        if (isDecodedResult(value)) {
           result += `  ${key}:\n`
           result += await formatDecodedResult(value, 2, includeRawData)
         } else {
@@ -521,7 +539,7 @@ function DecodeTab() {
     // Format the result nicely
     let result = `Function: ${data.function}\nParameters:\n`
     for (const [key, value] of Object.entries(data.parameters)) {
-      if (isNestedCall(value) || isMultiSend(value) || isUniswapResult(value) || isSendToL1Result(value) || isArbitrumResult(value)) {
+      if (isDecodedResult(value)) {
         result += `  ${key}:\n`
         result += await formatDecodedResult(value, 2, includeRawData)
       } else {
@@ -692,6 +710,19 @@ function DecodeTab() {
       if (arbitrumResult) {
         await decodeArbitrumRawLeaves(arbitrumResult, decodeNested)
         setDecodedData(arbitrumResult)
+        return
+      }
+
+      // Try Multicall3 aggregate3Value decoder. Detection is selector-exact,
+      // so null means "not aggregate3Value" and decoding falls through to the
+      // signature-based path.
+      const aggregate3ValueResult = await decodeAggregate3ValueCalls(
+        abiData.trim(),
+        resolveSignatures,
+        nestedDecodeOptions
+      )
+      if (aggregate3ValueResult) {
+        setDecodedData(aggregate3ValueResult)
         return
       }
     }
@@ -1221,6 +1252,42 @@ function DecodeTab() {
                 </button>
                 <div className="text-gray-600 dark:text-gray-400 mt-1">
                   <p>Safe multi-send batching an ERC-20 approve and a Uniswap V3 swap (WETH → USDC), with the nested router commands decoded.</p>
+                </div>
+              </div>
+
+              <div>
+                <span className="font-medium">Multicall3 aggregate3Value:</span>
+                <button
+                  onClick={() => {
+                    setAbiData('0x174dea710000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000140000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc20000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000044095ea7b30000000000000000000000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000000000000000000000000000000000003fc91a3afd70395cd496c647d5a6cc9d4b2b7fad0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000016345785d8a0000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000002843593564c000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000065f5e10000000000000000000000000000000000000000000000000000000000000000020b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000016345785d8a000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000016345785d8a00000000000000000000000000000000000000000000000000000000000002faf08000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002bc02aaa39b223fe8d0a0e5c4f27ead9083c756cc20001f4a0b86991c6218b36c1d19d4a2e9eb0ce3606eb4800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000')
+                    setSignature('aggregate3Value((address,bool,uint256,bytes)[])')
+                    setIsFunction(true)
+                    setAutoDetect(true)
+                  }}
+                  className="ml-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+                >
+                  Try Example
+                </button>
+                <div className="text-gray-600 dark:text-gray-400 mt-1">
+                  <p>Multicall3 aggregate3Value batching an ERC-20 approve and a Uniswap V3 swap (WETH → USDC), with each call&rsquo;s calldata decoded.</p>
+                </div>
+              </div>
+
+              <div>
+                <span className="font-medium">Nested Safes via Multicall3:</span>
+                <button
+                  onClick={() => {
+                    setAbiData('0x174dea710000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000440000000000000000000000000c2819dc788505aac350142a7a707bf9d03e3bd0300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000003446a761202000000000000000000000000ca11bde05977b3631167028862be2a173976ca110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002c00000000000000000000000000000000000000000000000000000000000000144174dea710000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000200000000000000000000000005a0aae59d09fccbddb6c6cceb07b7279367c3d2a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000024d4d9bdcdff21287dc91ef8d0d631df016c6d1c3de6ea14b4208d23467c7e874f24f196bc00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000ca11bde05977b3631167028862be2a173976ca1100000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005a0aae59d09fccbddb6c6cceb07b7279367c3d2a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000004646a761202000000000000000000000000ca11bde05977b3631167028862be2a173976ca110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000014000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003e00000000000000000000000000000000000000000000000000000000000000264174dea7100000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000002000000000000000000000000010d7b35078d3baabb96dd45a9143b94be65b12cd0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000144b10709570000000000000000000000000000000000000000000000000000000000000001000000000000000000000000e1dffcbe4e22b813f26d2106d943c102e7cab87e000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a4dead000000000000000000000000000000000000000000000000000000000000acc005dcd857b401e4732e6f7837135a22825cfaee018baf058227872540ac60efbd38b023d9dae257b4c29daee99a28e6e86778b499361294c134ea000000000000000000000000000000000000000000000000000000000000def13832bfbef03173e4c49a00ec0dd178817a02d1779ba6e03d8b90de867373db8cf1a58d2f7f006b3a0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041000000000000000000000000c2819dc788505aac350142a7a707bf9d03e3bd030000000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000')
+                    setSignature('aggregate3Value((address,bool,uint256,bytes)[])')
+                    setIsFunction(true)
+                    setAutoDetect(true)
+                  }}
+                  className="ml-2 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
+                >
+                  Try Example
+                </button>
+                <div className="text-gray-600 dark:text-gray-400 mt-1">
+                  <p>aggregate3Value batching two Safe execTransactions that each delegatecall Multicall3 again: one Safe approves the other&rsquo;s transaction hash, the second executes a setImplementation call.</p>
                 </div>
               </div>
 
