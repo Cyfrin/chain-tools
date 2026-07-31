@@ -35,12 +35,26 @@ export interface MultiSendData {
   transactions: MultiSendTransaction[]
 }
 
+export interface Aggregate3ValueCall {
+  target: string
+  allowFailure: boolean
+  value: string
+  callData: string
+  decodedData?: DecodedNestedResult
+}
+
+export interface Aggregate3ValueData {
+  _isAggregate3Value: true
+  calls: Aggregate3ValueCall[]
+}
+
 export type DecodedNestedResult =
   | UniswapDecodeResult
   | SendToL1DecodeResult
   | ArbitrumGovernanceDecodeResult
   | NestedCall
   | MultiSendData
+  | Aggregate3ValueData
   | string
 
 export type SignatureResolver = (selector: string) => Promise<string[]>
@@ -160,6 +174,75 @@ export async function decodeMultiSendTransactions(
   return multiSendResult
 }
 
+// Multicall3 aggregate3Value(Call3Value[]), selector 0x174dea71. Component
+// names mirror the canonical Call3Value struct so decoded calls carry named
+// fields; names do not affect the selector.
+const AGGREGATE3_VALUE_FRAGMENT = FunctionFragment.from(
+  'aggregate3Value((address target, bool allowFailure, uint256 value, bytes callData)[] calls)'
+)
+
+/**
+ * Parse Multicall3 aggregate3Value calldata into its individual calls.
+ * Returns null when `data` is not an aggregate3Value call.
+ */
+export function decodeAggregate3ValueData(data: string): Aggregate3ValueData | null {
+  const hexData = data.startsWith('0x') ? data : '0x' + data
+  if (!hexData.toLowerCase().startsWith(AGGREGATE3_VALUE_FRAGMENT.selector)) {
+    return null
+  }
+
+  try {
+    const [decodedCalls] = AbiCoder.defaultAbiCoder().decode(
+      AGGREGATE3_VALUE_FRAGMENT.inputs,
+      '0x' + hexData.substring(10)
+    )
+
+    const calls: Aggregate3ValueCall[] = []
+    for (const call of decodedCalls) {
+      calls.push({
+        target: call.target,
+        allowFailure: call.allowFailure,
+        value: call.value.toString(),
+        callData: call.callData,
+      })
+    }
+
+    return {
+      _isAggregate3Value: true,
+      calls,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Decode Multicall3 aggregate3Value calldata and recursively decode each inner
+ * call's data, attaching the result to `call.decodedData`. Returns null when
+ * `value` is not an aggregate3Value call.
+ */
+export async function decodeAggregate3ValueCalls(
+  value: string,
+  resolveSignatures: SignatureResolver,
+  options: DecodeOptions = {}
+): Promise<Aggregate3ValueData | null> {
+  const aggregateResult = decodeAggregate3ValueData(value)
+  if (!aggregateResult) {
+    return null
+  }
+
+  for (const call of aggregateResult.calls) {
+    if (call.callData && call.callData !== '0x' && call.callData.length > 10) {
+      const decoded = await decodeNestedCalldata(call.callData, resolveSignatures, options)
+      if (decoded !== call.callData) {
+        call.decodedData = decoded
+      }
+    }
+  }
+
+  return aggregateResult
+}
+
 export async function decodeNestedCalldata(
   value: string,
   resolveSignatures: SignatureResolver,
@@ -190,6 +273,13 @@ export async function decodeNestedCalldata(
       decodeNestedCalldata(calldata, resolveSignatures, options)
     )
     return arbitrumResult
+  }
+
+  // Multicall3 detection is selector-exact, so it needs no option gate the way
+  // the heuristic packed multi-send parse below does.
+  const aggregate3ValueResult = await decodeAggregate3ValueCalls(value, resolveSignatures, options)
+  if (aggregate3ValueResult) {
+    return aggregate3ValueResult
   }
 
   if (shouldDecodeMultiSend) {
